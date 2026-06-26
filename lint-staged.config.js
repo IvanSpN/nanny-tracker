@@ -6,10 +6,12 @@ module.exports = {
 
   'frontend/**/*.{json,css,md,mjs}': ['npm --prefix frontend exec prettier -- --write'],
 
-  'backend/**/*.{js,ts}': [
+  'backend/**/*.ts': [
     'npm --prefix backend exec prettier -- --write',
     'npm --prefix backend exec eslint -- --fix --config backend/eslint.config.mjs',
   ],
+
+  'backend/**/*.js': ['npm --prefix backend exec prettier -- --write'],
 
   'backend/**/*.{json,md,mjs}': ['npm --prefix backend exec prettier -- --write'],
 };
