@@ -4,7 +4,6 @@ import { ConfigService } from '@nestjs/config/dist/config.service';
 import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
-
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
@@ -15,4 +14,4 @@ async function bootstrap() {
 
   logger.log(`Backend started on http://localhost:${port}`);
 }
-bootstrap();
+void bootstrap();
