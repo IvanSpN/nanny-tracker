@@ -15,6 +15,7 @@ import {
 export enum UserRole {
   WORKER = 'worker',
   CLIENT = 'client',
+  ADMIN = 'admin',
 }
 
 @Table({
@@ -23,7 +24,7 @@ export enum UserRole {
   paranoid: true,
   underscored: true,
 })
-export class User extends Model<User> {
+export class User extends Model {
   @PrimaryKey
   @Default(DataType.UUIDV4)
   @Column({
@@ -42,7 +43,14 @@ export class User extends Model<User> {
   @Column({
     type: DataType.STRING,
   })
-  declare email: string;
+  declare login: string;
+
+  @Unique
+  @AllowNull(true)
+  @Column({
+    type: DataType.STRING,
+  })
+  declare email: string | null;
 
   @AllowNull(false)
   @Column({
@@ -59,19 +67,24 @@ export class User extends Model<User> {
 
   @CreatedAt
   @Column({
+    type: DataType.DATE,
     field: 'created_at',
   })
   declare createdAt: Date;
 
   @UpdatedAt
   @Column({
+    type: DataType.DATE,
     field: 'updated_at',
   })
   declare updatedAt: Date;
 
   @DeletedAt
   @Column({
+    type: DataType.DATE,
     field: 'deleted_at',
   })
-  declare deletedAt?: Date;
+  declare deletedAt: Date | null;
 }
+
+export default User;

@@ -23,9 +23,15 @@ module.exports = {
             allowNull: false,
           },
 
-          email: {
+          login: {
             type: Sequelize.STRING,
             allowNull: false,
+            unique: true,
+          },
+
+          email: {
+            type: Sequelize.STRING,
+            allowNull: true,
             unique: true,
           },
 
@@ -35,8 +41,14 @@ module.exports = {
           },
 
           role: {
-            type: Sequelize.ENUM('worker', 'client'),
+            type: Sequelize.ENUM('worker', 'client', 'admin'),
             allowNull: false,
+          },
+
+          must_change_password: {
+            type: Sequelize.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
           },
 
           created_at: {
