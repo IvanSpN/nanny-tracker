@@ -4,12 +4,8 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.sequelize.transaction(async (transaction) => {
-      await queryInterface.sequelize.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;', {
-        transaction,
-      });
-
       await queryInterface.createTable(
-        'users',
+        'workers',
         {
           id: {
             type: Sequelize.UUID,
@@ -18,26 +14,44 @@ module.exports = {
             defaultValue: Sequelize.literal('gen_random_uuid()'),
           },
 
-          login: {
-            type: Sequelize.STRING,
+          user_id: {
+            type: Sequelize.UUID,
             allowNull: false,
-            unique: true,
+            references: {
+              model: 'users',
+              key: 'id',
+            },
+            onUpdate: 'CASCADE',
+            onDelete: 'RESTRICT',
           },
 
-          email: {
+          name: {
+            type: Sequelize.STRING,
+            allowNull: false,
+          },
+
+          phone: {
             type: Sequelize.STRING,
             allowNull: true,
-            unique: true,
+            defaultValue: null,
           },
 
-          password_hash: {
-            type: Sequelize.STRING,
-            allowNull: false,
+          default_regular_rate: {
+            type: Sequelize.DECIMAL(12, 2),
+            allowNull: true,
+            defaultValue: null,
           },
 
-          role: {
-            type: Sequelize.ENUM('worker', 'client', 'admin'),
+          default_weekend_rate: {
+            type: Sequelize.DECIMAL(12, 2),
+            allowNull: true,
+            defaultValue: null,
+          },
+
+          is_active: {
+            type: Sequelize.BOOLEAN,
             allowNull: false,
+            defaultValue: true,
           },
 
           created_at: {
@@ -60,16 +74,19 @@ module.exports = {
         },
         { transaction },
       );
+
+      await queryInterface.addConstraint('workers', {
+        fields: ['user_id'],
+        type: 'unique',
+        name: 'workers_user_id_unique',
+        transaction,
+      });
     });
   },
 
   async down(queryInterface) {
     await queryInterface.sequelize.transaction(async (transaction) => {
-      await queryInterface.dropTable('users', { transaction });
-
-      await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_users_role";', {
-        transaction,
-      });
+      await queryInterface.dropTable('workers', { transaction });
     });
   },
 };

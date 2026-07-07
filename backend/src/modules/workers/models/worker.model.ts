@@ -1,30 +1,27 @@
 import {
   AllowNull,
+  BelongsTo,
   Column,
   CreatedAt,
   DataType,
   Default,
   DeletedAt,
+  ForeignKey,
   Model,
   PrimaryKey,
   Table,
   Unique,
   UpdatedAt,
 } from 'sequelize-typescript';
-
-export enum UserRole {
-  WORKER = 'worker',
-  CLIENT = 'client',
-  ADMIN = 'admin',
-}
+import { User } from '../../users/models/user.model';
 
 @Table({
-  tableName: 'users',
+  tableName: 'workers',
   timestamps: true,
   paranoid: true,
   underscored: true,
 })
-export class User extends Model {
+export class Worker extends Model {
   @PrimaryKey
   @Default(DataType.UUIDV4)
   @Column({
@@ -32,32 +29,54 @@ export class User extends Model {
   })
   declare id: string;
 
+  @ForeignKey(() => User)
   @Unique
+  @AllowNull(false)
+  @Column({
+    type: DataType.UUID,
+    field: 'user_id',
+  })
+  declare userId: string;
+
+  @BelongsTo(() => User, {
+    foreignKey: 'userId',
+    as: 'user',
+  })
+  declare user: User;
+
   @AllowNull(false)
   @Column({
     type: DataType.STRING,
   })
-  declare login: string;
+  declare name: string;
 
-  @Unique
   @AllowNull(true)
   @Column({
     type: DataType.STRING,
   })
-  declare email: string | null;
+  declare phone: string | null;
+
+  @AllowNull(true)
+  @Column({
+    type: DataType.DECIMAL(12, 2),
+    field: 'default_regular_rate',
+  })
+  declare defaultRegularRate: string | null;
+
+  @AllowNull(true)
+  @Column({
+    type: DataType.DECIMAL(12, 2),
+    field: 'default_weekend_rate',
+  })
+  declare defaultWeekendRate: string | null;
 
   @AllowNull(false)
+  @Default(true)
   @Column({
-    type: DataType.STRING,
-    field: 'password_hash',
+    type: DataType.BOOLEAN,
+    field: 'is_active',
   })
-  declare passwordHash: string;
-
-  @AllowNull(false)
-  @Column({
-    type: DataType.ENUM(...Object.values(UserRole)),
-  })
-  declare role: UserRole;
+  declare isActive: boolean;
 
   @CreatedAt
   @Column({
@@ -81,4 +100,4 @@ export class User extends Model {
   declare deletedAt: Date | null;
 }
 
-export default User;
+export default Worker;
