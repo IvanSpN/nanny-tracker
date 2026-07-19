@@ -88,6 +88,7 @@ export function WorkerScheduleScreen() {
   const activeClients = clients.filter((client) => client.isActive);
   const [weekOffset, setWeekOffset] = React.useState(0);
   const [copyError, setCopyError] = React.useState<string | null>(null);
+  const [addSessionDate, setAddSessionDate] = React.useState<string | null>(null);
   const touchStartX = React.useRef<number | null>(null);
   const baseWeekStart = React.useMemo(() => getStartOfWeek(new Date()), []);
   const weekStart = addWeeks(baseWeekStart, weekOffset);
@@ -108,8 +109,13 @@ export function WorkerScheduleScreen() {
   const clientMap = new Map(clients.map((client) => [client.id, client]));
   const groupedByClient = groupByClient(confirmedSessions, clients);
   const isScheduleLoading = workSessionsQuery.isLoading || clientsQuery.isLoading;
+  const isAddSessionDisabled = clientsQuery.isLoading || activeClients.length === 0;
   const mutationError =
     updateStatusMutation.error ?? deleteWorkSessionMutation.error ?? copyWorkSessionMutation.error;
+
+  const openAddSessionDialog = (dateKey: string) => {
+    setAddSessionDate(dateKey);
+  };
 
   const toggleSessionStatus = (session: WorkSession) => {
     updateStatusMutation.mutate({
@@ -118,16 +124,6 @@ export function WorkerScheduleScreen() {
         status: session.status === 'confirmed' ? 'pending' : 'confirmed',
       },
     });
-  };
-
-  const deleteSession = (session: WorkSession) => {
-    const confirmed = window.confirm('Удалить смену?');
-
-    if (!confirmed) {
-      return;
-    }
-
-    deleteWorkSessionMutation.mutate(session.id);
   };
 
   const copyWeekToNext = async () => {
@@ -177,12 +173,26 @@ export function WorkerScheduleScreen() {
             {formatDayRange(weekDays[0], weekDays[6])}
           </h1>
         </div>
-        <AddWorkSessionDialog
-          clients={activeClients}
-          defaultDate={dateFrom}
-          disabled={clientsQuery.isLoading || activeClients.length === 0}
-        />
+        <Button
+          size="icon"
+          disabled={isAddSessionDisabled}
+          title="Добавить смену"
+          onClick={() => openAddSessionDialog(dateFrom)}
+        >
+          <CalendarPlus />
+        </Button>
       </div>
+
+      <AddWorkSessionDialog
+        open={addSessionDate !== null}
+        clients={activeClients}
+        defaultDate={addSessionDate ?? dateFrom}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddSessionDate(null);
+          }
+        }}
+      />
 
       {(clientsQuery.isError || workSessionsQuery.isError || mutationError || copyError) && (
         <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -265,9 +275,20 @@ export function WorkerScheduleScreen() {
                     <h2 className="text-base font-semibold capitalize">{formatFullWeekday(day)}</h2>
                     <p className="text-sm text-muted-foreground">{formatDay(day)}</p>
                   </div>
-                  <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
-                    {formatHours(confirmedDayHours)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      disabled={isAddSessionDisabled}
+                      title="Добавить смену в этот день"
+                      onClick={() => openAddSessionDialog(dateKey)}
+                    >
+                      <CalendarPlus />
+                    </Button>
+                    <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
+                      {formatHours(confirmedDayHours)}
+                    </Badge>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -278,8 +299,18 @@ export function WorkerScheduleScreen() {
                   )}
 
                   {!isScheduleLoading && daySessions.length === 0 && (
-                    <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
-                      Свободный день
+                    <div className="rounded-md border border-dashed border-border px-3 py-4 text-center">
+                      <p className="text-sm text-muted-foreground">Свободный день</p>
+                      <Button
+                        className="mt-3"
+                        size="sm"
+                        variant="soft"
+                        disabled={isAddSessionDisabled}
+                        onClick={() => openAddSessionDialog(dateKey)}
+                      >
+                        <CalendarPlus />
+                        Добавить смену
+                      </Button>
                     </div>
                   )}
 
@@ -295,7 +326,7 @@ export function WorkerScheduleScreen() {
                         isStatusPending={updateStatusMutation.isPending}
                         isDeletePending={deleteWorkSessionMutation.isPending}
                         onToggle={() => toggleSessionStatus(session)}
-                        onDelete={() => deleteSession(session)}
+                        onDelete={() => deleteWorkSessionMutation.mutate(session.id)}
                       />
                     );
                   })}
@@ -418,15 +449,12 @@ function WorkSessionRow({
         <p className="text-sm font-semibold">{formatMoney(session.amount)}</p>
         <div className="flex items-center gap-1">
           <EditWorkSessionDialog session={session} clients={clients} />
-          <Button
-            size="icon"
-            variant="ghost"
-            title="Удалить"
-            disabled={isDeletePending}
-            onClick={onDelete}
-          >
-            <Trash2 />
-          </Button>
+          <DeleteWorkSessionDialog
+            session={session}
+            clientName={clientName}
+            isPending={isDeletePending}
+            onDelete={onDelete}
+          />
         </div>
         <Button
           size="sm"
@@ -441,16 +469,69 @@ function WorkSessionRow({
   );
 }
 
-function AddWorkSessionDialog({
-  clients,
-  defaultDate,
-  disabled,
+function DeleteWorkSessionDialog({
+  session,
+  clientName,
+  isPending,
+  onDelete,
 }: {
-  clients: WorkerClient[];
-  defaultDate: string;
-  disabled: boolean;
+  session: WorkSession;
+  clientName: string;
+  isPending: boolean;
+  onDelete: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
+
+  const deleteSession = () => {
+    onDelete();
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="icon" variant="ghost" title="Удалить" disabled={isPending}>
+          <Trash2 />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+        <DialogHeader>
+          <DialogTitle>Удалить смену?</DialogTitle>
+          <DialogDescription>
+            {clientName}, {formatDay(parseDate(session.workDate))}, {formatHours(session.hours)}.
+            Это действие нельзя отменить.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isPending}
+            onClick={() => setOpen(false)}
+          >
+            Отмена
+          </Button>
+          <Button type="button" variant="destructive" disabled={isPending} onClick={deleteSession}>
+            {isPending ? 'Удаляем...' : 'Удалить'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddWorkSessionDialog({
+  open,
+  clients,
+  defaultDate,
+  onOpenChange,
+}: {
+  open: boolean;
+  clients: WorkerClient[];
+  defaultDate: string;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createWorkSessionMutation = useCreateWorkSessionMutation();
   const form = useForm<WorkSessionFormInput, unknown, WorkSessionFormValues>({
     resolver: zodResolver(workSessionFormSchema),
@@ -484,7 +565,7 @@ function AddWorkSessionDialog({
         comment: values.comment?.trim() || null,
       });
 
-      setOpen(false);
+      onOpenChange(false);
       form.reset({
         clientId: values.clientId,
         workDate: values.workDate,
@@ -501,17 +582,12 @@ function AddWorkSessionDialog({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
+        onOpenChange(nextOpen);
         if (!nextOpen) {
           createWorkSessionMutation.reset();
         }
       }}
     >
-      <DialogTrigger asChild>
-        <Button size="icon" disabled={disabled} title="Добавить смену">
-          <CalendarPlus />
-        </Button>
-      </DialogTrigger>
       <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg">
         <DialogHeader>
           <DialogTitle>Новая смена</DialogTitle>
