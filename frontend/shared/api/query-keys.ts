@@ -9,4 +9,9 @@ export const queryKeys = {
     all: ['clients'] as const,
     detail: (id: string) => ['clients', id] as const,
   },
+  workSessions: {
+    all: ['work-sessions'] as const,
+    range: (dateFrom: string, dateTo: string) => ['work-sessions', { dateFrom, dateTo }] as const,
+    detail: (id: string) => ['work-sessions', id] as const,
+  },
 };
