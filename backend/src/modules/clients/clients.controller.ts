@@ -61,6 +61,11 @@ const clientResponseSchema = {
       type: 'boolean',
       example: true,
     },
+    isInitialPasswordChanged: {
+      type: 'boolean',
+      example: false,
+      description: 'Сменил ли клиент временный пароль после создания/сброса',
+    },
   },
 };
 

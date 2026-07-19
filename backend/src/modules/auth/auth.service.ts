@@ -1,7 +1,12 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
 import * as bcrypt from 'bcryptjs';
-import { UserRole } from '../users/models/user.model';
+import { User, UserRole } from '../users/models/user.model';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
 import { RegisterWorkerDto } from './dto/register-worker.dto';
@@ -67,10 +72,7 @@ export class AuthService {
     return {
       accessToken,
       user: {
-        id: result.user.id,
-        login: result.user.login,
-        email: result.user.email,
-        role: result.user.role,
+        ...this.toAuthUser(result.user),
       },
       worker: {
         id: result.worker.id,
@@ -100,12 +102,19 @@ export class AuthService {
     return {
       accessToken,
       user: {
-        id: user.id,
-        login: user.login,
-        email: user.email,
-        role: user.role,
+        ...this.toAuthUser(user),
       },
     };
+  }
+
+  async me(userId: string) {
+    const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+
+    return this.toAuthUser(user);
   }
 
   private async generateAccessToken(userId: string, role: UserRole): Promise<string> {
@@ -115,5 +124,15 @@ export class AuthService {
     };
 
     return this.jwtService.signAsync(payload);
+  }
+
+  private toAuthUser(user: User) {
+    return {
+      id: user.id,
+      login: user.login,
+      email: user.email,
+      role: user.role,
+      isInitialPasswordChanged: user.isInitialPasswordChanged,
+    };
   }
 }

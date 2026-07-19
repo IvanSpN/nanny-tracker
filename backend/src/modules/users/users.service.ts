@@ -34,6 +34,7 @@ export class UsersService {
         email: data.email,
         passwordHash: data.passwordHash,
         role: data.role,
+        isInitialPasswordChanged: data.isInitialPasswordChanged ?? true,
       },
       {
         transaction,
@@ -45,10 +46,12 @@ export class UsersService {
     userId: string,
     passwordHash: string,
     transaction?: Transaction,
+    isInitialPasswordChanged = true,
   ): Promise<void> {
     await this.userModel.update(
       {
         passwordHash,
+        isInitialPasswordChanged,
       },
       {
         where: { id: userId },

@@ -5,7 +5,7 @@ import { Sequelize } from 'sequelize-typescript';
 import * as bcrypt from 'bcryptjs';
 import { CreateClientDto } from './dto/create-client.dto';
 import { Client } from './models/client.model';
-import { UserRole } from '../users/models/user.model';
+import { User, UserRole } from '../users/models/user.model';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
 import { Worker } from '../workers/models/worker.model';
@@ -20,6 +20,7 @@ type ClientResponse = {
   phone: string | null;
   notes: string | null;
   isActive: boolean;
+  isInitialPasswordChanged: boolean;
 };
 
 type ClientCredentials = {
@@ -56,11 +57,12 @@ export class ClientsService {
               email: null,
               passwordHash,
               role: UserRole.CLIENT,
+              isInitialPasswordChanged: false,
             },
             transaction,
           );
 
-          return this.clientModel.create(
+          const client = await this.clientModel.create(
             {
               workerId: worker.id,
               userId: user.id,
@@ -75,10 +77,15 @@ export class ClientsService {
               transaction,
             },
           );
+
+          return {
+            client,
+            isInitialPasswordChanged: user.isInitialPasswordChanged,
+          };
         });
 
         return {
-          client: this.toClientResponse(client),
+          client: this.toClientResponse(client.client, client.isInitialPasswordChanged),
           credentials: {
             login,
             password,
@@ -102,6 +109,13 @@ export class ClientsService {
       where: {
         workerId: worker.id,
       },
+      include: [
+        {
+          model: User,
+          as: 'account',
+          attributes: ['id', 'isInitialPasswordChanged'],
+        },
+      ],
       order: [['createdAt', 'DESC']],
     });
 
@@ -131,7 +145,7 @@ export class ClientsService {
     const passwordHash = await bcrypt.hash(password, 12);
 
     await this.sequelize.transaction((transaction) =>
-      this.usersService.updatePassword(account.id, passwordHash, transaction),
+      this.usersService.updatePassword(account.id, passwordHash, transaction, false),
     );
 
     return {
@@ -158,6 +172,13 @@ export class ClientsService {
         id,
         workerId,
       },
+      include: [
+        {
+          model: User,
+          as: 'account',
+          attributes: ['id', 'isInitialPasswordChanged'],
+        },
+      ],
     });
 
     if (!client) {
@@ -180,7 +201,10 @@ export class ClientsService {
     throw new ConflictException('Не удалось сгенерировать уникальный логин клиента');
   }
 
-  private toClientResponse(client: Client): ClientResponse {
+  private toClientResponse(
+    client: Client,
+    isInitialPasswordChanged = client.account?.isInitialPasswordChanged ?? true,
+  ): ClientResponse {
     return {
       id: client.id,
       name: client.name,
@@ -189,6 +213,7 @@ export class ClientsService {
       phone: client.phone,
       notes: client.notes,
       isActive: client.isActive,
+      isInitialPasswordChanged,
     };
   }
 }

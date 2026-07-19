@@ -5,6 +5,7 @@ export type SessionUser = {
   role: UserRole;
   login?: string;
   email?: string | null;
+  isInitialPasswordChanged?: boolean;
 };
 
 export type AuthSession = {

@@ -46,7 +46,7 @@ export class AuthController {
     summary: 'Получить текущего пользователя по JWT-токену',
   })
   me(@Req() req: RequestWithUser) {
-    return req.user;
+    return this.authService.me(req.user.id);
   }
 
   @Get('worker-test')

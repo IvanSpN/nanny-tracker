@@ -5,4 +5,5 @@ export type CreateUserData = {
   email: string | null;
   passwordHash: string;
   role: UserRole;
+  isInitialPasswordChanged?: boolean;
 };

@@ -59,6 +59,14 @@ export class User extends Model {
   })
   declare role: UserRole;
 
+  @AllowNull(false)
+  @Default(true)
+  @Column({
+    type: DataType.BOOLEAN,
+    field: 'is_initial_password_changed',
+  })
+  declare isInitialPasswordChanged: boolean;
+
   @CreatedAt
   @Column({
     type: DataType.DATE,

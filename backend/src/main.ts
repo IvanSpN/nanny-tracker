@@ -9,7 +9,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const frontendUrls = (
-    configService.get<string>('FRONTEND_URL') || 'http://localhost:3000,http://localhost:3001'
+    configService.get<string>('FRONTEND_URL') ||
+    'http://localhost:3000,http://localhost:3001,http://localhost:3002'
   )
     .split(',')
     .map((origin) => origin.trim())

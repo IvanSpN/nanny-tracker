@@ -84,6 +84,15 @@ export function ClientCabinetScreen() {
           </Button>
         </div>
 
+        {user?.isInitialPasswordChanged === false && (
+          <div className="mb-4 rounded-lg border border-warning/25 bg-warning/10 px-4 py-3">
+            <p className="text-sm font-medium">Рекомендуем сменить временный пароль</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Работник видел этот пароль при создании доступа или после сброса.
+            </p>
+          </div>
+        )}
+
         {clientTab === 'overview' && <ClientOverview shifts={confirmedShifts} />}
         {clientTab === 'history' && <ClientHistory shifts={confirmedShifts} />}
         {clientTab === 'profile' && <ClientProfile onLogout={clearSession} />}
