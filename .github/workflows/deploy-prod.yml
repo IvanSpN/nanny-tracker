@@ -53,6 +53,7 @@ jobs:
     name: Deploy
     needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Prepare SSH key
@@ -64,7 +65,9 @@ jobs:
 
       - name: Deploy on server
         run: |
-          ssh -T -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
+          ssh -T -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
             set -euo pipefail
 
             cd ~/apps/nanny-tracker
@@ -76,11 +79,14 @@ jobs:
             echo "==> Validating Docker Compose config"
             docker compose config >/dev/null
 
+            echo "==> Cleaning up stale buildx state"
+            docker buildx prune -f || true
+
             echo "==> Starting database services"
             docker compose up -d postgres pgadmin
 
             echo "==> Building and running migrations"
-            docker compose --profile migrate build migrate
+            timeout 300s docker compose --profile migrate build --progress=plain migrate
 
             docker ps -aq --filter "name=nanny-tracker-migrate-run" | xargs -r docker rm -f
             docker rm -f nanny_tracker_migrate_ci >/dev/null 2>&1 || true
@@ -100,10 +106,10 @@ jobs:
             echo "==> Migrations finished"
 
             echo "==> Building backend image"
-            docker compose build backend
+            timeout 600s docker compose build --progress=plain backend
 
             echo "==> Building frontend image without cache"
-            docker compose build --no-cache frontend
+            timeout 900s docker compose build --progress=plain --no-cache frontend
 
             echo "==> Recreating application containers"
             docker compose up -d --force-recreate backend frontend nginx
