@@ -81,7 +81,8 @@ jobs:
 
             echo "==> Building and running migrations"
             docker compose --profile migrate build migrate
-            docker compose --profile migrate run --rm migrate
+            docker compose --profile migrate run --rm -T migrate
+            echo "==> Migrations finished"
 
             echo "==> Building backend image"
             docker compose build backend
