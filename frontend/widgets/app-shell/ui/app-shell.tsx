@@ -22,7 +22,7 @@ const workerNavigation: Array<{
 }> = [
   {
     value: 'schedule',
-    label: 'Расписание',
+    label: 'Расписание!',
     icon: CalendarDays,
   },
   {
