@@ -1,0 +1,83 @@
+name: CI/CD PROD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: /api
+        run: npm run build
+
+  deploy:
+    name: Deploy
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy on server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
+            set -euo pipefail
+
+            cd ~/apps/nanny-tracker
+
+            git fetch --prune origin main
+            git reset --hard origin/main
+
+            docker compose config >/dev/null
+
+            docker compose up -d postgres
+            docker compose --profile migrate build migrate
+            docker compose --profile migrate run --rm migrate
+            docker compose up -d --build
+
+            docker compose ps
+          EOF
