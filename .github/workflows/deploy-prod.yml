@@ -64,20 +64,33 @@ jobs:
 
       - name: Deploy on server
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
+          ssh -T -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
             set -euo pipefail
 
             cd ~/apps/nanny-tracker
 
+            echo "==> Updating repository"
             git fetch --prune origin main
             git reset --hard origin/main
 
+            echo "==> Validating Docker Compose config"
             docker compose config >/dev/null
 
-            docker compose up -d postgres
+            echo "==> Starting database services"
+            docker compose up -d postgres pgadmin
+
+            echo "==> Building and running migrations"
             docker compose --profile migrate build migrate
             docker compose --profile migrate run --rm migrate
-            docker compose up -d --build
+
+            echo "==> Building backend image"
+            docker compose build backend
+
+            echo "==> Building frontend image without cache"
+            docker compose build --no-cache frontend
+
+            echo "==> Recreating application containers"
+            docker compose up -d --force-recreate backend frontend nginx
 
             docker compose ps
           EOF
