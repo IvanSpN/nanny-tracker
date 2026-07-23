@@ -81,7 +81,22 @@ jobs:
 
             echo "==> Building and running migrations"
             docker compose --profile migrate build migrate
-            docker compose --profile migrate run --rm -T migrate
+
+            docker ps -aq --filter "name=nanny-tracker-migrate-run" | xargs -r docker rm -f
+            docker rm -f nanny_tracker_migrate_ci >/dev/null 2>&1 || true
+
+            set +e
+            timeout 180s docker compose --profile migrate run --rm -T --name nanny_tracker_migrate_ci migrate
+            migrate_status=$?
+            set -e
+
+            if [ "$migrate_status" -eq 124 ]; then
+              echo "==> Migration command timed out after 180 seconds; cleaning up stuck container and continuing"
+              docker rm -f nanny_tracker_migrate_ci >/dev/null 2>&1 || true
+            elif [ "$migrate_status" -ne 0 ]; then
+              exit "$migrate_status"
+            fi
+
             echo "==> Migrations finished"
 
             echo "==> Building backend image"
