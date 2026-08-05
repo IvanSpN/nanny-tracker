@@ -70,12 +70,6 @@ jobs:
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
             set -euo pipefail
 
-            # Критично: отвязываем stdin скрипта от heredoc-пайпа ssh-сессии,
-            # иначе вложенные docker compose run могут "съесть" оставшуюся
-            # часть скрипта из этого же stdin, и выполнение молча обрывается
-            # (именно так пропадала сборка фронта).
-            exec < /dev/null
-
             cd ~/apps/nanny-tracker
 
             echo "==> Updating repository"
