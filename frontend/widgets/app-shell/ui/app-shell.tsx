@@ -96,7 +96,7 @@ export function AppShell() {
               </div>
               <div>
                 <p className="text-sm font-semibold">Nanny Tracker</p>
-                <p className="text-xs text-muted-foreground">Кабинет работника</p>
+                <p className="text-xs text-muted-foreground">Кабинет работничка</p>
               </div>
             </div>
 
