@@ -44,6 +44,7 @@ async function bootstrap() {
 
   await app.listen(port);
 
+  logger.log('CI/CD persistence check marker: backend build 2026-08-13');
   logger.log(`Backend started on http://localhost:${port}`);
   logger.log(`Swagger available on http://localhost:${port}/docs`);
 }

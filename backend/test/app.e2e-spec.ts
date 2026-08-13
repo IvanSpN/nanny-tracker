@@ -17,7 +17,10 @@ describe('AppController (e2e)', () => {
   });
 
   it('/ (GET)', () => {
-    return request(app.getHttpServer()).get('/').expect(200).expect('Hello World!');
+    return request(app.getHttpServer())
+      .get('/')
+      .expect(200)
+      .expect('Nanny Tracker backend is running. CI/CD persistence check: 2026-08-13.');
   });
 
   afterEach(async () => {
