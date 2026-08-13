@@ -59,8 +59,9 @@ export class CreateWorkSessionDto {
   @ApiPropertyOptional({
     enum: WorkSessionRateType,
     enumName: 'WorkSessionRateType',
-    example: WorkSessionRateType.REGULAR,
-    description: 'Тип ставки. Если не передан, backend выберет regular/weekend по дате.',
+    example: WorkSessionRateType.WEEKEND,
+    description:
+      'Переопределение ставки для праздника. Если не передан, backend выберет regular/weekend по дате. Суббота и воскресенье всегда считаются weekend.',
   })
   @IsOptional()
   @IsEnum(WorkSessionRateType)

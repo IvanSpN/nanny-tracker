@@ -71,7 +71,7 @@ const workSessionFormSchema = z.object({
   clientId: z.string().min(1, 'Выберите клиента'),
   workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Укажите дату'),
   hours: z.coerce.number().min(0.25, 'Минимум 15 минут').max(24, 'Максимум 24 часа'),
-  rateType: z.enum(['regular', 'weekend']),
+  dayType: z.enum(['normal', 'holiday']),
   comment: z.string().optional(),
 });
 
@@ -142,7 +142,7 @@ export function WorkerScheduleScreen() {
           clientId: session.clientId,
           workDate: toDateKey(addDays(parseDate(session.workDate), 7)),
           hours: session.hours,
-          rateType: session.rateType,
+          rateType: isManualHoliday(session) ? 'weekend' : undefined,
           comment: session.comment,
         });
       }
@@ -444,7 +444,7 @@ function WorkSessionRow({
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-sm font-semibold">{clientName}</p>
           <Badge variant={session.rateType === 'weekend' ? 'warning' : 'secondary'}>
-            {session.rateType === 'weekend' ? 'выходной' : 'будний'}
+            {getRateBadgeLabel(session)}
           </Badge>
           <Badge variant={getStatusBadgeVariant(session.status)}>
             {getStatusLabel(session.status)}
@@ -551,14 +551,13 @@ function AddWorkSessionDialog({
       clientId: clients[0]?.id ?? '',
       workDate: defaultDate,
       hours: 4,
-      rateType: getDefaultRateType(defaultDate),
+      dayType: 'normal',
       comment: '',
     },
   });
 
   React.useEffect(() => {
     form.setValue('workDate', defaultDate);
-    form.setValue('rateType', getDefaultRateType(defaultDate));
   }, [defaultDate, form]);
 
   React.useEffect(() => {
@@ -573,7 +572,7 @@ function AddWorkSessionDialog({
         clientId: values.clientId,
         workDate: values.workDate,
         hours: values.hours,
-        rateType: values.rateType,
+        rateType: toRateType(values.dayType),
         comment: values.comment?.trim() || null,
       });
 
@@ -582,7 +581,7 @@ function AddWorkSessionDialog({
         clientId: values.clientId,
         workDate: values.workDate,
         hours: 4,
-        rateType: getDefaultRateType(values.workDate),
+        dayType: 'normal',
         comment: '',
       });
     } catch {
@@ -656,7 +655,7 @@ function EditWorkSessionDialog({
           clientId: values.clientId,
           workDate: values.workDate,
           hours: values.hours,
-          rateType: values.rateType,
+          rateType: toRateType(values.dayType),
           comment: values.comment?.trim() || null,
         },
       });
@@ -760,18 +759,18 @@ function WorkSessionFormFields({
       </div>
 
       <div className="space-y-2">
-        <Label>Ставка</Label>
+        <Label>Тип дня</Label>
         <Controller
           control={form.control}
-          name="rateType"
+          name="dayType"
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="regular">Будний день</SelectItem>
-                <SelectItem value="weekend">Выходной / праздник</SelectItem>
+                <SelectItem value="normal">Обычный день</SelectItem>
+                <SelectItem value="holiday">Праздничный день</SelectItem>
               </SelectContent>
             </Select>
           )}
@@ -793,18 +792,34 @@ function getStartOfWeek(date: Date) {
   return addDays(new Date(date.getFullYear(), date.getMonth(), date.getDate()), diff);
 }
 
-function getDefaultRateType(dateKey: string): WorkSessionRateType {
-  return isWeekend(parseDate(dateKey)) ? 'weekend' : 'regular';
-}
-
 function getSessionFormDefaults(session: WorkSession): WorkSessionFormValues {
   return {
     clientId: session.clientId,
     workDate: session.workDate,
     hours: session.hours,
-    rateType: session.rateType,
+    dayType: isManualHoliday(session) ? 'holiday' : 'normal',
     comment: session.comment ?? '',
   };
+}
+
+function toRateType(dayType: WorkSessionFormValues['dayType']): WorkSessionRateType | undefined {
+  return dayType === 'holiday' ? 'weekend' : undefined;
+}
+
+function isManualHoliday(session: WorkSession) {
+  return session.rateType === 'weekend' && !isWeekend(parseDate(session.workDate));
+}
+
+function getRateBadgeLabel(session: WorkSession) {
+  if (isManualHoliday(session)) {
+    return 'праздничный';
+  }
+
+  if (session.rateType === 'weekend') {
+    return 'выходной';
+  }
+
+  return 'будний';
 }
 
 function getStatusBadgeVariant(status: WorkSessionStatus) {

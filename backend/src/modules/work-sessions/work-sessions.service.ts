@@ -44,7 +44,7 @@ export class WorkSessionsService {
     const worker = await this.getWorkerByUserId(userId);
     const client = await this.findOwnedClient(worker.id, dto.clientId);
     const workedMinutes = this.hoursToMinutes(dto.hours);
-    const rateType = dto.rateType ?? this.getDefaultRateType(dto.workDate);
+    const rateType = this.resolveRateType(dto.workDate, dto.rateType);
     const rateValue = this.getRateValue(client, rateType);
     const amount = this.calculateAmount(rateValue, workedMinutes);
 
@@ -139,8 +139,8 @@ export class WorkSessionsService {
     const workDate = dto.workDate ?? workSession.workDate;
     const workedMinutes =
       dto.hours === undefined ? workSession.workedMinutes : this.hoursToMinutes(dto.hours);
-    const rateType =
-      dto.rateType ?? (dto.workDate ? this.getDefaultRateType(workDate) : workSession.rateType);
+    const requestedRateType = dto.rateType ?? (dto.workDate ? undefined : workSession.rateType);
+    const rateType = this.resolveRateType(workDate, requestedRateType);
     const rateValue = this.getRateValue(client, rateType);
     const amount = this.calculateAmount(rateValue, workedMinutes);
 
@@ -254,14 +254,25 @@ export class WorkSessionsService {
     return workedMinutes;
   }
 
-  private getDefaultRateType(workDate: string): WorkSessionRateType {
-    const day = new Date(`${workDate}T00:00:00.000Z`).getUTCDay();
+  private resolveRateType(
+    workDate: string,
+    requestedRateType?: WorkSessionRateType,
+  ): WorkSessionRateType {
+    if (this.isWeekendDate(workDate)) {
+      return WorkSessionRateType.WEEKEND;
+    }
 
-    if (day === 0 || day === 6) {
+    if (requestedRateType === WorkSessionRateType.WEEKEND) {
       return WorkSessionRateType.WEEKEND;
     }
 
     return WorkSessionRateType.REGULAR;
+  }
+
+  private isWeekendDate(workDate: string): boolean {
+    const day = new Date(`${workDate}T00:00:00.000Z`).getUTCDay();
+
+    return day === 0 || day === 6;
   }
 
   private getRateValue(client: Client, rateType: WorkSessionRateType): string {
