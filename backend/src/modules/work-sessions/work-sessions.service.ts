@@ -69,8 +69,30 @@ export class WorkSessionsService {
     query: FindWorkSessionsQueryDto,
   ): Promise<WorkSessionResponse[]> {
     const worker = await this.getWorkerByUserId(userId);
-    const where: WhereOptions = {
-      workerId: worker.id,
+
+    return this.findAllForOwner({ workerId: worker.id }, query);
+  }
+
+  async findAllForUser(
+    userId: string,
+    role: string,
+    query: FindWorkSessionsQueryDto,
+  ): Promise<WorkSessionResponse[]> {
+    if (role === 'client') {
+      const client = await this.findClientByUserId(userId);
+
+      return this.findAllForOwner({ clientId: client.id }, query);
+    }
+
+    return this.findAllForWorker(userId, query);
+  }
+
+  private async findAllForOwner(
+    ownerWhere: Record<string, unknown>,
+    query: FindWorkSessionsQueryDto,
+  ): Promise<WorkSessionResponse[]> {
+    const where: Record<string, unknown> = {
+      ...ownerWhere,
     };
 
     if (query.dateFrom && query.dateTo && query.dateFrom > query.dateTo) {
@@ -85,7 +107,7 @@ export class WorkSessionsService {
     }
 
     const workSessions = await this.workSessionModel.findAll({
-      where,
+      where: where as WhereOptions,
       include: [this.clientInclude],
       order: [
         ['workDate', 'ASC'],
@@ -182,6 +204,20 @@ export class WorkSessionsService {
       where: {
         id,
         workerId,
+      },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Клиент не найден');
+    }
+
+    return client;
+  }
+
+  private async findClientByUserId(userId: string): Promise<Client> {
+    const client = await this.clientModel.findOne({
+      where: {
+        userId,
       },
     });
 

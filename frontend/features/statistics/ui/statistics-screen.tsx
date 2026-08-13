@@ -1,31 +1,41 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import { Banknote, CalendarRange, Clock3, WalletCards } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { queryKeys } from '@/shared/api/query-keys';
-import { getWeekDays, parseDate, toDateKey } from '@/shared/lib/date';
+import { useClientsQuery } from '@/entities/client/api/client.queries';
+import type { WorkerClient } from '@/entities/client/model/types';
+import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
+import type { WorkSession } from '@/entities/work-session/model/types';
+import { getApiErrorMessage } from '@/shared/api/http-client';
+import { addDays, getWeekDays, toDateKey } from '@/shared/lib/date';
 import { formatHours, formatMoney } from '@/shared/lib/money';
-import { getWorkerDashboard } from '@/shared/mock/api';
-import { mockDashboard } from '@/shared/mock/dashboard';
-import type { Client, Shift } from '@/shared/types/domain';
 
-const weekStart = parseDate('2026-07-13');
-const weekKeys = new Set(getWeekDays(weekStart).map(toDateKey));
+const monthFormatter = new Intl.DateTimeFormat('ru-RU', {
+  month: 'long',
+});
 
 export function StatisticsScreen() {
-  const { data = mockDashboard } = useQuery({
-    queryKey: queryKeys.worker.dashboard,
-    queryFn: getWorkerDashboard,
-  });
-  const confirmedShifts = data.shifts.filter((shift) => shift.status === 'confirmed');
-  const weekShifts = confirmedShifts.filter((shift) => weekKeys.has(shift.date));
-  const monthShifts = confirmedShifts.filter((shift) => shift.date.startsWith('2026-07'));
-  const paid = sum(data.payments.map((payment) => payment.amount));
-  const monthAccrued = sum(monthShifts.map(shiftAmount));
-  const balance = monthAccrued - paid;
+  const today = new Date();
+  const weekStart = getStartOfWeek(today);
+  const weekEnd = addDays(weekStart, 6);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const dateFrom = toDateKey(minDate(weekStart, monthStart));
+  const dateTo = toDateKey(maxDate(weekEnd, monthEnd));
+  const weekKeys = new Set(getWeekDays(weekStart).map(toDateKey));
+  const monthKey = toDateKey(monthStart).slice(0, 7);
+  const monthLabel = monthFormatter.format(today);
+  const clientsQuery = useClientsQuery();
+  const workSessionsQuery = useWorkSessionsQuery({ dateFrom, dateTo });
+  const clients = clientsQuery.data ?? [];
+  const sessions = workSessionsQuery.data ?? [];
+  const confirmedSessions = sessions.filter((session) => session.status === 'confirmed');
+  const weekSessions = confirmedSessions.filter((session) => weekKeys.has(session.workDate));
+  const monthSessions = confirmedSessions.filter((session) =>
+    session.workDate.startsWith(monthKey),
+  );
 
   return (
     <section className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6">
@@ -38,16 +48,31 @@ export function StatisticsScreen() {
         <StatMetric
           icon={Clock3}
           title="Неделя"
-          value={formatHours(sum(weekShifts.map((shift) => shift.actualHours)))}
+          value={formatHours(sum(weekSessions.map((session) => session.hours)))}
         />
         <StatMetric
           icon={Banknote}
           title="За неделю"
-          value={formatMoney(sum(weekShifts.map(shiftAmount)))}
+          value={formatMoney(sum(weekSessions.map((session) => session.amount)))}
         />
-        <StatMetric icon={WalletCards} title="Оплачено" value={formatMoney(paid)} />
-        <StatMetric icon={CalendarRange} title="Остаток" value={formatMoney(balance)} />
+        <StatMetric
+          icon={WalletCards}
+          title={capitalize(monthLabel)}
+          value={formatHours(sum(monthSessions.map((session) => session.hours)))}
+        />
+        <StatMetric
+          icon={CalendarRange}
+          title="За месяц"
+          value={formatMoney(sum(monthSessions.map((session) => session.amount)))}
+        />
       </div>
+
+      {(clientsQuery.isError || workSessionsQuery.isError) && (
+        <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {clientsQuery.isError && <p>{getApiErrorMessage(clientsQuery.error)}</p>}
+          {workSessionsQuery.isError && <p>{getApiErrorMessage(workSessionsQuery.error)}</p>}
+        </div>
+      )}
 
       <Tabs defaultValue="week" className="gap-4">
         <TabsList className="grid w-full grid-cols-2 sm:w-80">
@@ -56,10 +81,18 @@ export function StatisticsScreen() {
         </TabsList>
 
         <TabsContent value="week">
-          <Breakdown shifts={weekShifts} clients={data.clients} />
+          <Breakdown
+            sessions={weekSessions}
+            clients={clients}
+            isLoading={workSessionsQuery.isLoading}
+          />
         </TabsContent>
         <TabsContent value="month">
-          <Breakdown shifts={monthShifts} clients={data.clients} />
+          <Breakdown
+            sessions={monthSessions}
+            clients={clients}
+            isLoading={workSessionsQuery.isLoading}
+          />
         </TabsContent>
       </Tabs>
     </section>
@@ -88,12 +121,20 @@ function StatMetric({
   );
 }
 
-function Breakdown({ shifts, clients }: { shifts: Shift[]; clients: Client[] }) {
+function Breakdown({
+  sessions,
+  clients,
+  isLoading,
+}: {
+  sessions: WorkSession[];
+  clients: WorkerClient[];
+  isLoading: boolean;
+}) {
   const rows = clients
     .map((client) => {
-      const clientShifts = shifts.filter((shift) => shift.clientId === client.id);
-      const hours = sum(clientShifts.map((shift) => shift.actualHours));
-      const amount = sum(clientShifts.map(shiftAmount));
+      const clientSessions = sessions.filter((session) => session.clientId === client.id);
+      const hours = sum(clientSessions.map((session) => session.hours));
+      const amount = sum(clientSessions.map((session) => session.amount));
 
       return {
         client,
@@ -114,6 +155,18 @@ function Breakdown({ shifts, clients }: { shifts: Shift[]; clients: Client[] }) 
         </div>
 
         <div className="space-y-4">
+          {isLoading && (
+            <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+              Загружаем статистику...
+            </p>
+          )}
+
+          {!isLoading && rows.length === 0 && (
+            <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+              За выбранный период нет подтверждённых смен.
+            </p>
+          )}
+
           {rows.map((row) => (
             <div key={row.client.id}>
               <div className="mb-2 flex items-center justify-between gap-3">
@@ -160,10 +213,25 @@ function SummaryLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function shiftAmount(shift: Shift) {
-  return shift.actualHours * shift.hourlyRateSnapshot;
-}
-
 function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0);
+}
+
+function getStartOfWeek(date: Date) {
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+
+  return addDays(new Date(date.getFullYear(), date.getMonth(), date.getDate()), diff);
+}
+
+function minDate(first: Date, second: Date) {
+  return first < second ? first : second;
+}
+
+function maxDate(first: Date, second: Date) {
+  return first > second ? first : second;
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

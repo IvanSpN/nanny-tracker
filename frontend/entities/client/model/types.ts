@@ -22,6 +22,8 @@ export type CreateClientPayload = {
   notes?: string | null;
 };
 
+export type UpdateClientPayload = Partial<CreateClientPayload>;
+
 export type CreateClientResponse = {
   client: WorkerClient;
   credentials: ClientCredentials;

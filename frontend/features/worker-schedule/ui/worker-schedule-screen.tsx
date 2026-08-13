@@ -88,6 +88,7 @@ export function WorkerScheduleScreen() {
   const activeClients = clients.filter((client) => client.isActive);
   const [weekOffset, setWeekOffset] = React.useState(0);
   const [copyError, setCopyError] = React.useState<string | null>(null);
+  const [noClientsMessage, setNoClientsMessage] = React.useState<string | null>(null);
   const [addSessionDate, setAddSessionDate] = React.useState<string | null>(null);
   const touchStartX = React.useRef<number | null>(null);
   const baseWeekStart = React.useMemo(() => getStartOfWeek(new Date()), []);
@@ -109,11 +110,17 @@ export function WorkerScheduleScreen() {
   const clientMap = new Map(clients.map((client) => [client.id, client]));
   const groupedByClient = groupByClient(confirmedSessions, clients);
   const isScheduleLoading = workSessionsQuery.isLoading || clientsQuery.isLoading;
-  const isAddSessionDisabled = clientsQuery.isLoading || activeClients.length === 0;
+  const isAddSessionDisabled = clientsQuery.isLoading;
   const mutationError =
     updateStatusMutation.error ?? deleteWorkSessionMutation.error ?? copyWorkSessionMutation.error;
 
   const openAddSessionDialog = (dateKey: string) => {
+    if (activeClients.length === 0) {
+      setNoClientsMessage('Сначала добавь активного клиента, потом можно будет создать смену.');
+      return;
+    }
+
+    setNoClientsMessage(null);
     setAddSessionDate(dateKey);
   };
 
@@ -194,12 +201,17 @@ export function WorkerScheduleScreen() {
         }}
       />
 
-      {(clientsQuery.isError || workSessionsQuery.isError || mutationError || copyError) && (
+      {(clientsQuery.isError ||
+        workSessionsQuery.isError ||
+        mutationError ||
+        copyError ||
+        noClientsMessage) && (
         <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {clientsQuery.isError && <p>{getApiErrorMessage(clientsQuery.error)}</p>}
           {workSessionsQuery.isError && <p>{getApiErrorMessage(workSessionsQuery.error)}</p>}
           {mutationError && <p>{getApiErrorMessage(mutationError)}</p>}
           {copyError && <p>{copyError}</p>}
+          {noClientsMessage && <p>{noClientsMessage}</p>}
         </div>
       )}
 

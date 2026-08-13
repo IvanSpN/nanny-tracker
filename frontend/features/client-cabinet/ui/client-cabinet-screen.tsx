@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery } from '@tanstack/react-query';
 import { BarChart3, Clock3, History, KeyRound, LogOut, UserRound } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -11,15 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useCurrentClientQuery } from '@/entities/client/api/client.queries';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
-import { queryKeys } from '@/shared/api/query-keys';
-import { formatDay, parseDate } from '@/shared/lib/date';
+import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
+import type { WorkSession } from '@/entities/work-session/model/types';
+import { getApiErrorMessage } from '@/shared/api/http-client';
+import { addDays, formatDay, parseDate, toDateKey } from '@/shared/lib/date';
 import { formatHours, formatMoney } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
-import { getWorkerDashboard } from '@/shared/mock/api';
-import { mockDashboard } from '@/shared/mock/dashboard';
 import { useNavigationStore, type ClientTab } from '@/shared/store/use-navigation-store';
-import type { Shift } from '@/shared/types/domain';
 
 const passwordSchema = z
   .object({
@@ -57,17 +56,18 @@ const clientNavigation: Array<{
 ];
 
 export function ClientCabinetScreen() {
-  const { data = mockDashboard } = useQuery({
-    queryKey: queryKeys.worker.dashboard,
-    queryFn: getWorkerDashboard,
-  });
   const clientTab = useNavigationStore((state) => state.clientTab);
   const setClientTab = useNavigationStore((state) => state.setClientTab);
   const clearSession = useSessionStore((state) => state.clearSession);
   const user = useSessionStore((state) => state.user);
-  const client = data.clients[0];
-  const confirmedShifts = data.shifts.filter(
-    (shift) => shift.clientId === client.id && shift.status === 'confirmed',
+  const currentClientQuery = useCurrentClientQuery();
+  const today = new Date();
+  const dateFrom = toDateKey(addDays(today, -370));
+  const dateTo = toDateKey(addDays(today, 60));
+  const workSessionsQuery = useWorkSessionsQuery({ dateFrom, dateTo });
+  const client = currentClientQuery.data;
+  const confirmedSessions = (workSessionsQuery.data ?? []).filter(
+    (session) => session.status === 'confirmed',
   );
 
   return (
@@ -76,7 +76,7 @@ export function ClientCabinetScreen() {
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Кабинет клиента</p>
-            <h1 className="text-2xl font-semibold tracking-normal">{client.name}</h1>
+            <h1 className="text-2xl font-semibold tracking-normal">{client?.name ?? 'Клиент'}</h1>
             <p className="text-sm text-muted-foreground">{user?.login}</p>
           </div>
           <Button variant="outline" size="sm" onClick={clearSession}>
@@ -93,8 +93,25 @@ export function ClientCabinetScreen() {
           </div>
         )}
 
-        {clientTab === 'overview' && <ClientOverview shifts={confirmedShifts} />}
-        {clientTab === 'history' && <ClientHistory shifts={confirmedShifts} />}
+        {(currentClientQuery.isError || workSessionsQuery.isError) && (
+          <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {currentClientQuery.isError && <p>{getApiErrorMessage(currentClientQuery.error)}</p>}
+            {workSessionsQuery.isError && <p>{getApiErrorMessage(workSessionsQuery.error)}</p>}
+          </div>
+        )}
+
+        {(currentClientQuery.isLoading || workSessionsQuery.isLoading) && (
+          <div className="rounded-lg border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+            Загружаем кабинет...
+          </div>
+        )}
+
+        {!currentClientQuery.isLoading && !workSessionsQuery.isLoading && (
+          <>
+            {clientTab === 'overview' && <ClientOverview sessions={confirmedSessions} />}
+            {clientTab === 'history' && <ClientHistory sessions={confirmedSessions} />}
+          </>
+        )}
         {clientTab === 'profile' && <ClientProfile onLogout={clearSession} />}
       </main>
 
@@ -125,10 +142,11 @@ export function ClientCabinetScreen() {
   );
 }
 
-function ClientOverview({ shifts }: { shifts: Shift[] }) {
-  const monthShifts = shifts.filter((shift) => shift.date.startsWith('2026-07'));
-  const hours = sum(monthShifts.map((shift) => shift.actualHours));
-  const amount = sum(monthShifts.map(shiftAmount));
+function ClientOverview({ sessions }: { sessions: WorkSession[] }) {
+  const monthKey = toDateKey(new Date()).slice(0, 7);
+  const monthSessions = sessions.filter((session) => session.workDate.startsWith(monthKey));
+  const hours = sum(monthSessions.map((session) => session.hours));
+  const amount = sum(monthSessions.map((session) => session.amount));
 
   return (
     <div className="space-y-4">
@@ -159,8 +177,14 @@ function ClientOverview({ shifts }: { shifts: Shift[] }) {
           <Badge variant="success">подтверждено</Badge>
         </div>
         <div className="space-y-2">
-          {monthShifts.slice(0, 4).map((shift) => (
-            <ShiftHistoryRow key={shift.id} shift={shift} />
+          {monthSessions.length === 0 && (
+            <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+              Подтверждённых смен за месяц пока нет.
+            </p>
+          )}
+
+          {monthSessions.slice(0, 4).map((session) => (
+            <SessionHistoryRow key={session.id} session={session} />
           ))}
         </div>
       </section>
@@ -168,16 +192,22 @@ function ClientOverview({ shifts }: { shifts: Shift[] }) {
   );
 }
 
-function ClientHistory({ shifts }: { shifts: Shift[] }) {
+function ClientHistory({ sessions }: { sessions: WorkSession[] }) {
   return (
     <section className="rounded-lg border border-border bg-card p-4">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="font-semibold">История</h2>
-        <Badge variant="secondary">{shifts.length}</Badge>
+        <Badge variant="secondary">{sessions.length}</Badge>
       </div>
       <div className="space-y-2">
-        {shifts.map((shift) => (
-          <ShiftHistoryRow key={shift.id} shift={shift} />
+        {sessions.length === 0 && (
+          <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+            Подтверждённых смен пока нет.
+          </p>
+        )}
+
+        {sessions.map((session) => (
+          <SessionHistoryRow key={session.id} session={session} />
         ))}
       </div>
     </section>
@@ -241,20 +271,16 @@ function ClientProfile({ onLogout }: { onLogout: () => void }) {
   );
 }
 
-function ShiftHistoryRow({ shift }: { shift: Shift }) {
+function SessionHistoryRow({ session }: { session: WorkSession }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2">
       <div>
-        <p className="text-sm font-medium">{formatDay(parseDate(shift.date))}</p>
-        <p className="text-xs text-muted-foreground">{formatHours(shift.actualHours)}</p>
+        <p className="text-sm font-medium">{formatDay(parseDate(session.workDate))}</p>
+        <p className="text-xs text-muted-foreground">{formatHours(session.hours)}</p>
       </div>
-      <p className="font-semibold">{formatMoney(shiftAmount(shift))}</p>
+      <p className="font-semibold">{formatMoney(session.amount)}</p>
     </div>
   );
-}
-
-function shiftAmount(shift: Shift) {
-  return shift.actualHours * shift.hourlyRateSnapshot;
 }
 
 function sum(values: number[]) {

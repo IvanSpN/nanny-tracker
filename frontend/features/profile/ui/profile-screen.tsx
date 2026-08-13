@@ -1,14 +1,29 @@
 'use client';
 
-import { LogOut, Moon, Palette, Sun, UserRound } from 'lucide-react';
+import * as React from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { LogOut, Moon, Palette, Save, Sun, UserRound } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
+import { useUpdateWorkerProfileMutation } from '@/entities/worker/api/worker.mutations';
+import { useWorkerProfileQuery } from '@/entities/worker/api/worker.queries';
+import { getApiErrorMessage } from '@/shared/api/http-client';
 import { cn } from '@/shared/lib/utils';
 import { useNavigationStore } from '@/shared/store/use-navigation-store';
 import { accentPalettes, useThemeStore, type AccentColor } from '@/shared/store/use-theme-store';
+
+const workerProfileSchema = z.object({
+  name: z.string().trim().min(2, 'Укажите имя'),
+});
+
+type WorkerProfileValues = z.infer<typeof workerProfileSchema>;
 
 export function ProfileScreen() {
   const user = useSessionStore((state) => state.user);
@@ -18,10 +33,40 @@ export function ProfileScreen() {
   const accentColor = useThemeStore((state) => state.accentColor);
   const setThemeMode = useThemeStore((state) => state.setThemeMode);
   const setAccentColor = useThemeStore((state) => state.setAccentColor);
+  const workerProfileQuery = useWorkerProfileQuery();
+  const updateWorkerProfileMutation = useUpdateWorkerProfileMutation();
+  const [isProfileSaved, setIsProfileSaved] = React.useState(false);
+  const form = useForm<WorkerProfileValues>({
+    resolver: zodResolver(workerProfileSchema),
+    defaultValues: {
+      name: '',
+    },
+  });
+
+  React.useEffect(() => {
+    if (workerProfileQuery.data) {
+      form.reset({
+        name: workerProfileQuery.data.name,
+      });
+    }
+  }, [form, workerProfileQuery.data]);
 
   const logout = () => {
     clearSession();
     resetNavigation();
+  };
+
+  const submitProfile = async (values: WorkerProfileValues) => {
+    setIsProfileSaved(false);
+
+    try {
+      await updateWorkerProfileMutation.mutateAsync({
+        name: values.name,
+      });
+      setIsProfileSaved(true);
+    } catch {
+      // Error is rendered from mutation state.
+    }
   };
 
   return (
@@ -38,10 +83,43 @@ export function ProfileScreen() {
               <UserRound className="size-6" />
             </div>
             <div>
-              <h2 className="font-semibold">{user?.login ?? 'Работник'}</h2>
+              <h2 className="font-semibold">{workerProfileQuery.data?.name ?? 'Работник'}</h2>
               <p className="text-sm text-muted-foreground">{user?.email ?? user?.role}</p>
             </div>
           </div>
+
+          <form className="mb-4 space-y-3" onSubmit={form.handleSubmit(submitProfile)}>
+            <div className="space-y-2">
+              <Label htmlFor="worker-name">Имя работника</Label>
+              <Input
+                id="worker-name"
+                disabled={workerProfileQuery.isLoading || updateWorkerProfileMutation.isPending}
+                {...form.register('name', {
+                  onChange: () => setIsProfileSaved(false),
+                })}
+              />
+              {form.formState.errors.name && (
+                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+              )}
+            </div>
+            {workerProfileQuery.error && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {getApiErrorMessage(workerProfileQuery.error)}
+              </p>
+            )}
+            {updateWorkerProfileMutation.error && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {getApiErrorMessage(updateWorkerProfileMutation.error)}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Button type="submit" disabled={updateWorkerProfileMutation.isPending}>
+                <Save />
+                {updateWorkerProfileMutation.isPending ? 'Сохраняем...' : 'Сохранить'}
+              </Button>
+              {isProfileSaved && <Badge variant="success">Сохранено</Badge>}
+            </div>
+          </form>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Card>

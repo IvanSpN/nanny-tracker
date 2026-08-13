@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export type ThemeMode = 'light' | 'dark';
 export type AccentColor = 'rose' | 'coral' | 'lilac' | 'mint';
@@ -52,9 +53,20 @@ type ThemeState = {
   setAccentColor: (color: AccentColor) => void;
 };
 
-export const useThemeStore = create<ThemeState>((set) => ({
-  themeMode: 'light',
-  accentColor: 'rose',
-  setThemeMode: (themeMode) => set({ themeMode }),
-  setAccentColor: (accentColor) => set({ accentColor }),
-}));
+export const useThemeStore = create<ThemeState>()(
+  persist(
+    (set) => ({
+      themeMode: 'light',
+      accentColor: 'rose',
+      setThemeMode: (themeMode) => set({ themeMode }),
+      setAccentColor: (accentColor) => set({ accentColor }),
+    }),
+    {
+      name: 'nanny-tracker-theme',
+      partialize: (state) => ({
+        themeMode: state.themeMode,
+        accentColor: state.accentColor,
+      }),
+    },
+  ),
+);

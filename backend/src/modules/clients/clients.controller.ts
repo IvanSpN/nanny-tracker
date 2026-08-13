@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiConflictResponse,
@@ -14,6 +24,7 @@ import {
 import { Request } from 'express';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -140,6 +151,28 @@ export class ClientsController {
     return this.clientsService.findAllForWorker(req.user.id);
   }
 
+  @Get('me')
+  @Roles(UserRole.CLIENT)
+  @ApiOperation({
+    summary: 'Получить профиль текущего клиента',
+  })
+  @ApiOkResponse({
+    description: 'Профиль текущего клиента',
+    schema: clientResponseSchema,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'JWT-токен отсутствует или недействителен',
+  })
+  @ApiForbiddenResponse({
+    description: 'Доступ разрешён только пользователям с ролью client',
+  })
+  @ApiNotFoundResponse({
+    description: 'Клиент не найден',
+  })
+  findMe(@Req() req: RequestWithUser) {
+    return this.clientsService.findOneForClientUser(req.user.id);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Получить одного своего клиента',
@@ -164,6 +197,36 @@ export class ClientsController {
   })
   findOne(@Req() req: RequestWithUser, @Param('id') id: string) {
     return this.clientsService.findOneForWorker(req.user.id, id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Изменить своего клиента',
+  })
+  @ApiParam({
+    name: 'id',
+    format: 'uuid',
+    description: 'ID клиента',
+  })
+  @ApiOkResponse({
+    description: 'Клиент обновлён',
+    schema: clientResponseSchema,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'JWT-токен отсутствует или недействителен',
+  })
+  @ApiForbiddenResponse({
+    description: 'Доступ разрешён только пользователям с ролью worker',
+  })
+  @ApiNotFoundResponse({
+    description: 'Клиент не найден',
+  })
+  update(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateClientDto: UpdateClientDto,
+  ) {
+    return this.clientsService.updateForWorker(req.user.id, id, updateClientDto);
   }
 
   @Post(':id/reset-password')

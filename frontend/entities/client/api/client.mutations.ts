@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/shared/api/query-keys';
 import { clientApi } from './client.api';
-import type { CreateClientPayload, WorkerClient } from '../model/types';
+import type { CreateClientPayload, UpdateClientPayload, WorkerClient } from '../model/types';
 
 export function useCreateClientMutation() {
   const queryClient = useQueryClient();
@@ -39,6 +39,27 @@ export function useResetClientPasswordMutation() {
             : client,
         ),
       );
+    },
+  });
+}
+
+export function useUpdateClientMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ clientId, payload }: { clientId: string; payload: UpdateClientPayload }) =>
+      clientApi.updateClient(clientId, payload),
+    onSuccess: (updatedClient) => {
+      queryClient.setQueryData<WorkerClient[]>(queryKeys.clients.all, (clients = []) =>
+        clients.map((client) => (client.id === updatedClient.id ? updatedClient : client)),
+      );
+
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.clients.all,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.workSessions.all,
+      });
     },
   });
 }

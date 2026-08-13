@@ -4,6 +4,7 @@ import type {
   CreateClientPayload,
   CreateClientResponse,
   ResetClientPasswordResponse,
+  UpdateClientPayload,
   WorkerClient,
 } from '../model/types';
 
@@ -30,6 +31,12 @@ export const clientApi = {
     return clients.map(mapClient);
   },
 
+  getCurrentClient: async () => {
+    const client = await apiRequest<WorkerClientDto>('/clients/me');
+
+    return mapClient(client);
+  },
+
   createClient: async (payload: CreateClientPayload): Promise<CreateClientResponse> => {
     const response = await apiRequest<CreateClientResponseDto>('/clients', {
       method: 'POST',
@@ -46,6 +53,15 @@ export const clientApi = {
     apiRequest<ResetClientPasswordResponse>(`/clients/${clientId}/reset-password`, {
       method: 'POST',
     }),
+
+  updateClient: async (clientId: string, payload: UpdateClientPayload) => {
+    const client = await apiRequest<WorkerClientDto>(`/clients/${clientId}`, {
+      method: 'PATCH',
+      body: payload,
+    });
+
+    return mapClient(client);
+  },
 };
 
 function mapClient(client: WorkerClientDto): WorkerClient {

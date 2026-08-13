@@ -4,6 +4,7 @@ import { UniqueConstraintError } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import * as bcrypt from 'bcryptjs';
 import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 import { Client } from './models/client.model';
 import { User, UserRole } from '../users/models/user.model';
 import { UsersService } from '../users/users.service';
@@ -127,6 +128,43 @@ export class ClientsService {
     const client = await this.findOwnedClient(worker.id, id);
 
     return this.toClientResponse(client);
+  }
+
+  async findOneForClientUser(userId: string): Promise<ClientResponse> {
+    const client = await this.clientModel.findOne({
+      where: {
+        userId,
+      },
+      include: [
+        {
+          model: User,
+          as: 'account',
+          attributes: ['id', 'isInitialPasswordChanged'],
+        },
+      ],
+    });
+
+    if (!client) {
+      throw new NotFoundException('Клиент не найден');
+    }
+
+    return this.toClientResponse(client);
+  }
+
+  async updateForWorker(userId: string, id: string, dto: UpdateClientDto): Promise<ClientResponse> {
+    const worker = await this.getWorkerByUserId(userId);
+    const client = await this.findOwnedClient(worker.id, id);
+
+    await client.update({
+      name: dto.name === undefined ? client.name : dto.name.trim(),
+      regularRate: dto.regularRate === undefined ? client.regularRate : dto.regularRate,
+      weekendRate:
+        dto.weekendRate === undefined ? client.weekendRate : dto.weekendRate?.trim() || null,
+      phone: dto.phone === undefined ? client.phone : dto.phone?.trim() || null,
+      notes: dto.notes === undefined ? client.notes : dto.notes?.trim() || null,
+    });
+
+    return this.toClientResponse(await this.findOwnedClient(worker.id, id));
   }
 
   async resetPasswordForWorker(

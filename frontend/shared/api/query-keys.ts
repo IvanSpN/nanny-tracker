@@ -4,9 +4,11 @@ export const queryKeys = {
   },
   worker: {
     dashboard: ['worker', 'dashboard'] as const,
+    me: ['worker', 'me'] as const,
   },
   clients: {
     all: ['clients'] as const,
+    me: ['clients', 'me'] as const,
     detail: (id: string) => ['clients', id] as const,
   },
   workSessions: {

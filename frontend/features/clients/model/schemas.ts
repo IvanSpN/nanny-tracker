@@ -1,10 +1,14 @@
 import { z } from 'zod';
 
+const optionalPositiveNumber = z.preprocess(
+  (value) => (value === '' || value === null ? undefined : value),
+  z.coerce.number().positive('Укажите ставку').optional(),
+);
+
 export const createClientSchema = z.object({
   name: z.string().trim().min(2, 'Укажите имя'),
-  phone: z.string().trim().optional(),
   regularRate: z.coerce.number().positive('Укажите ставку'),
-  weekendRate: z.coerce.number().positive('Укажите ставку').optional(),
+  weekendRate: optionalPositiveNumber,
   notes: z.string().trim().optional(),
 });
 

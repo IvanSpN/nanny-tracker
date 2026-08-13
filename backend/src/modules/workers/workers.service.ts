@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Transaction } from 'sequelize';
 import { Worker } from './models/worker.model';
 import { CreateWorkerData } from './types/create-worker-data.type';
+import { UpdateWorkerDto } from './dto/update-worker.dto';
 
 @Injectable()
 export class WorkersService {
@@ -37,5 +38,40 @@ export class WorkersService {
         transaction,
       },
     );
+  }
+
+  async findProfileByUserId(userId: string) {
+    const worker = await this.findByUserId(userId);
+
+    if (!worker) {
+      throw new NotFoundException('Работник не найден');
+    }
+
+    return this.toWorkerResponse(worker);
+  }
+
+  async updateProfileByUserId(userId: string, dto: UpdateWorkerDto) {
+    const worker = await this.findByUserId(userId);
+
+    if (!worker) {
+      throw new NotFoundException('Работник не найден');
+    }
+
+    await worker.update({
+      name: dto.name.trim(),
+    });
+
+    return this.toWorkerResponse(worker);
+  }
+
+  private toWorkerResponse(worker: Worker) {
+    return {
+      id: worker.id,
+      name: worker.name,
+      phone: worker.phone,
+      defaultRegularRate: worker.defaultRegularRate,
+      defaultWeekendRate: worker.defaultWeekendRate,
+      isActive: worker.isActive,
+    };
   }
 }

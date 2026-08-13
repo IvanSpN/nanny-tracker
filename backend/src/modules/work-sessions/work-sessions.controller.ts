@@ -153,6 +153,7 @@ export class WorkSessionsController {
   }
 
   @Get()
+  @Roles(UserRole.WORKER, UserRole.CLIENT)
   @ApiOperation({
     summary: 'Получить свои смены за период',
   })
@@ -185,7 +186,7 @@ export class WorkSessionsController {
     description: 'Доступ разрешён только пользователям с ролью worker',
   })
   findAll(@Req() req: RequestWithUser, @Query() query: FindWorkSessionsQueryDto) {
-    return this.workSessionsService.findAllForWorker(req.user.id, query);
+    return this.workSessionsService.findAllForUser(req.user.id, req.user.role, query);
   }
 
   @Get(':id')

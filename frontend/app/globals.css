@@ -108,6 +108,18 @@ select {
   font: inherit;
 }
 
+a[href],
+button:not(:disabled),
+select:not(:disabled),
+summary,
+[role='button']:not([aria-disabled='true']),
+[role='tab']:not([aria-disabled='true']),
+[role='switch']:not([aria-disabled='true']),
+[data-slot='select-trigger']:not([data-disabled]),
+[data-slot='select-item']:not([data-disabled]) {
+  cursor: pointer;
+}
+
 ::selection {
   background: color-mix(in oklch, var(--primary) 22%, transparent);
 }

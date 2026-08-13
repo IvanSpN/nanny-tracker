@@ -10,3 +10,10 @@ export function useClientsQuery() {
     queryFn: clientApi.getClients,
   });
 }
+
+export function useCurrentClientQuery() {
+  return useQuery({
+    queryKey: queryKeys.clients.me,
+    queryFn: clientApi.getCurrentClient,
+  });
+}
