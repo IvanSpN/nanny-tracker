@@ -9,11 +9,12 @@ import {
   ChevronRight,
   Clock3,
   Copy,
+  MessageSquareText,
   Pencil,
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { Controller, useForm, type UseFormReturn } from 'react-hook-form';
+import { Controller, useForm, useWatch, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,16 +68,26 @@ import {
 import { formatHours, formatMoney } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
 
+const WORK_SESSION_COMMENT_MAX_LENGTH = 240;
+
 const workSessionFormSchema = z.object({
   clientId: z.string().min(1, 'Выберите клиента'),
   workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Укажите дату'),
   hours: z.coerce.number().min(0.25, 'Минимум 15 минут').max(24, 'Максимум 24 часа'),
   dayType: z.enum(['normal', 'holiday']),
-  comment: z.string().optional(),
+  comment: z
+    .string()
+    .max(WORK_SESSION_COMMENT_MAX_LENGTH, 'Комментарий до 240 символов')
+    .optional(),
+});
+
+const workSessionCommentSchema = z.object({
+  comment: z.string().max(WORK_SESSION_COMMENT_MAX_LENGTH, 'Комментарий до 240 символов'),
 });
 
 type WorkSessionFormInput = z.input<typeof workSessionFormSchema>;
 type WorkSessionFormValues = z.output<typeof workSessionFormSchema>;
+type WorkSessionCommentValues = z.infer<typeof workSessionCommentSchema>;
 type ClientSummary = {
   id: string;
   name: string;
@@ -454,12 +465,15 @@ function WorkSessionRow({
           {formatHours(session.hours)} · {formatMoney(session.rateValue)}/ч
         </p>
         {session.comment && (
-          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{session.comment}</p>
+          <p className="mt-2 line-clamp-3 rounded-md bg-muted/70 px-2 py-1.5 text-xs text-muted-foreground">
+            {session.comment}
+          </p>
         )}
       </div>
       <div className="flex flex-col items-end justify-between gap-2">
         <p className="text-sm font-semibold">{formatMoney(session.amount)}</p>
         <div className="flex items-center gap-1">
+          <WorkSessionCommentDialog session={session} />
           <EditWorkSessionDialog session={session} clients={clients} />
           <DeleteWorkSessionDialog
             session={session}
@@ -478,6 +492,140 @@ function WorkSessionRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
+  const [open, setOpen] = React.useState(false);
+  const updateWorkSessionMutation = useUpdateWorkSessionMutation();
+  const form = useForm<WorkSessionCommentValues>({
+    resolver: zodResolver(workSessionCommentSchema),
+    defaultValues: {
+      comment: session.comment ?? '',
+    },
+  });
+  const comment =
+    useWatch({
+      control: form.control,
+      name: 'comment',
+    }) ?? '';
+  const isPending = updateWorkSessionMutation.isPending;
+
+  React.useEffect(() => {
+    if (open) {
+      form.reset({
+        comment: session.comment ?? '',
+      });
+    }
+  }, [form, open, session.comment]);
+
+  const saveComment = async (values: WorkSessionCommentValues) => {
+    try {
+      await updateWorkSessionMutation.mutateAsync({
+        id: session.id,
+        payload: {
+          comment: values.comment.trim() || null,
+        },
+      });
+
+      setOpen(false);
+    } catch {
+      // Error is rendered from mutation state.
+    }
+  };
+
+  const deleteComment = async () => {
+    try {
+      await updateWorkSessionMutation.mutateAsync({
+        id: session.id,
+        payload: {
+          comment: null,
+        },
+      });
+
+      form.reset({
+        comment: '',
+      });
+      setOpen(false);
+    } catch {
+      // Error is rendered from mutation state.
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          updateWorkSessionMutation.reset();
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          size="icon"
+          variant={session.comment ? 'soft' : 'ghost'}
+          title={session.comment ? 'Изменить комментарий' : 'Добавить комментарий'}
+        >
+          <MessageSquareText />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+        <DialogHeader>
+          <DialogTitle>Комментарий к смене</DialogTitle>
+          <DialogDescription>
+            {formatDay(parseDate(session.workDate))}, {formatHours(session.hours)}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form className="space-y-4" onSubmit={form.handleSubmit(saveComment)}>
+          <div className="space-y-2">
+            <Label htmlFor={`session-comment-${session.id}`}>Комментарий</Label>
+            <Textarea
+              id={`session-comment-${session.id}`}
+              className="min-h-28 resize-none"
+              maxLength={WORK_SESSION_COMMENT_MAX_LENGTH}
+              placeholder="Например: дневной сон, прогулка, важные детали"
+              {...form.register('comment')}
+            />
+            <div className="flex items-center justify-between gap-3">
+              {form.formState.errors.comment ? (
+                <p className="text-xs text-destructive">{form.formState.errors.comment.message}</p>
+              ) : (
+                <span className="text-xs text-muted-foreground">Небольшая заметка для смены</span>
+              )}
+              <span className="text-xs text-muted-foreground">
+                {comment.length}/{WORK_SESSION_COMMENT_MAX_LENGTH}
+              </span>
+            </div>
+          </div>
+
+          {updateWorkSessionMutation.error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {getApiErrorMessage(updateWorkSessionMutation.error)}
+            </p>
+          )}
+
+          <DialogFooter>
+            {session.comment && (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isPending}
+                onClick={() => void deleteComment()}
+              >
+                <Trash2 />
+                {isPending ? 'Удаляем...' : 'Удалить'}
+              </Button>
+            )}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? 'Сохраняем...' : 'Сохранить'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -714,6 +862,12 @@ function WorkSessionFormFields({
   form: UseFormReturn<WorkSessionFormInput, unknown, WorkSessionFormValues>;
   clients: WorkerClient[];
 }) {
+  const comment =
+    useWatch({
+      control: form.control,
+      name: 'comment',
+    }) ?? '';
+
   return (
     <>
       <div className="space-y-2">
@@ -779,7 +933,23 @@ function WorkSessionFormFields({
 
       <div className="space-y-2">
         <Label htmlFor="shift-comment">Комментарий</Label>
-        <Textarea id="shift-comment" {...form.register('comment')} />
+        <Textarea
+          id="shift-comment"
+          className="resize-none"
+          maxLength={WORK_SESSION_COMMENT_MAX_LENGTH}
+          placeholder="Например: дневной сон, прогулка, важные детали"
+          {...form.register('comment')}
+        />
+        <div className="flex items-center justify-between gap-3">
+          {form.formState.errors.comment ? (
+            <p className="text-xs text-destructive">{form.formState.errors.comment.message}</p>
+          ) : (
+            <span className="text-xs text-muted-foreground">Необязательно</span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {comment.length}/{WORK_SESSION_COMMENT_MAX_LENGTH}
+          </span>
+        </div>
       </div>
     </>
   );

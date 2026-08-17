@@ -9,7 +9,7 @@ type SessionState = {
   user: SessionUser | null;
   hasHydrated: boolean;
   setSession: (session: AuthSession) => void;
-  setUser: (user: SessionUser) => void;
+  setUser: (user: SessionUser | null) => void;
   clearSession: () => void;
   setHasHydrated: (hasHydrated: boolean) => void;
 };
@@ -37,9 +37,9 @@ export const useSessionStore = create<SessionState>()(
       name: 'nanny-tracker-session',
       partialize: (state) => ({
         accessToken: state.accessToken,
-        user: state.user,
       }),
       onRehydrateStorage: () => (state) => {
+        state?.setUser(null);
         state?.setHasHydrated(true);
       },
     },

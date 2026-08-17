@@ -273,12 +273,19 @@ function ClientProfile({ onLogout }: { onLogout: () => void }) {
 
 function SessionHistoryRow({ session }: { session: WorkSession }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2">
-      <div>
-        <p className="text-sm font-medium">{formatDay(parseDate(session.workDate))}</p>
-        <p className="text-xs text-muted-foreground">{formatHours(session.hours)}</p>
+    <div className="rounded-md bg-muted px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{formatDay(parseDate(session.workDate))}</p>
+          <p className="text-xs text-muted-foreground">{formatHours(session.hours)}</p>
+        </div>
+        <p className="shrink-0 font-semibold">{formatMoney(session.amount)}</p>
       </div>
-      <p className="font-semibold">{formatMoney(session.amount)}</p>
+      {session.comment && (
+        <div className="mt-2 border-t border-border/60 pt-2">
+          <p className="line-clamp-3 text-xs text-muted-foreground">{session.comment}</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,10 +9,13 @@ import {
   IsUUID,
   Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WorkSessionRateType } from '../models/work-sessions';
+
+export const WORK_SESSION_COMMENT_MAX_LENGTH = 240;
 
 const trimString = ({ value }: { value: unknown }): unknown => {
   if (typeof value === 'string') {
@@ -70,10 +73,12 @@ export class CreateWorkSessionDto {
   @ApiPropertyOptional({
     example: 'Вечерняя смена',
     description: 'Комментарий к смене',
+    maxLength: WORK_SESSION_COMMENT_MAX_LENGTH,
     nullable: true,
   })
   @Transform(trimString)
   @IsOptional()
   @IsString()
+  @MaxLength(WORK_SESSION_COMMENT_MAX_LENGTH)
   comment?: string | null;
 }

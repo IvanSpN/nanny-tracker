@@ -25,8 +25,8 @@ export function AuthScreen() {
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      login: 'worker_demo',
-      password: 'password',
+      login: '',
+      password: '',
     },
   });
 
@@ -40,7 +40,6 @@ export function AuthScreen() {
       phone: '',
     },
   });
-  const authError = loginMutation.error ?? registerWorkerMutation.error;
 
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-8">
@@ -73,7 +72,11 @@ export function AuthScreen() {
                 >
                   <div className="space-y-2">
                     <Label htmlFor="login">Логин</Label>
-                    <Input id="login" {...loginForm.register('login')} />
+                    <Input
+                      id="login"
+                      placeholder="Введите логин"
+                      {...loginForm.register('login')}
+                    />
                     {loginForm.formState.errors.login && (
                       <p className="text-xs text-destructive">
                         {loginForm.formState.errors.login.message}
@@ -83,7 +86,12 @@ export function AuthScreen() {
 
                   <div className="space-y-2">
                     <Label htmlFor="password">Пароль</Label>
-                    <Input id="password" type="password" {...loginForm.register('password')} />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Введите пароль"
+                      {...loginForm.register('password')}
+                    />
                     {loginForm.formState.errors.password && (
                       <p className="text-xs text-destructive">
                         {loginForm.formState.errors.password.message}
@@ -158,12 +166,6 @@ export function AuthScreen() {
                 </form>
               </TabsContent>
             </Tabs>
-
-            {authError && (
-              <p className="mt-4 text-center text-xs text-muted-foreground">
-                Проверь, что backend запущен на http://localhost:4000
-              </p>
-            )}
           </CardContent>
         </Card>
       </div>

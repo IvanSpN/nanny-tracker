@@ -57,7 +57,7 @@ export function AppShell() {
       const currentUser = useSessionStore.getState().user;
 
       setUser({
-        ...currentUser,
+        ...(currentUser ?? {}),
         ...meQuery.data,
       });
     }
@@ -73,8 +73,16 @@ export function AppShell() {
     return <AppLoadingScreen />;
   }
 
-  if (!accessToken || !user) {
+  if (!accessToken) {
     return <AuthScreen />;
+  }
+
+  if (!user) {
+    if (meQuery.isError) {
+      return <AuthScreen />;
+    }
+
+    return <AppLoadingScreen />;
   }
 
   if (user.role === 'client') {
