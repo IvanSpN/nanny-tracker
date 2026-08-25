@@ -15,8 +15,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.dataset.accent = accentColor;
     root.style.setProperty('--primary', palette.primary);
     root.style.setProperty('--ring', palette.ring);
-    root.style.setProperty('--accent', palette.accent);
-    root.style.setProperty('--app-soft', palette.appSoft);
+    root.style.setProperty('--accent', themeMode === 'dark' ? palette.darkAccent : palette.accent);
+    root.style.setProperty(
+      '--app-soft',
+      themeMode === 'dark' ? palette.darkAppSoft : palette.appSoft,
+    );
   }, [accentColor, themeMode]);
 
   return children;

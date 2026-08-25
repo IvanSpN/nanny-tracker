@@ -26,6 +26,17 @@
   --warning: oklch(0.68 0.15 70);
   --app-surface: oklch(0.965 0.021 350);
   --app-soft: oklch(0.94 0.035 350);
+  --schedule-weekday-a: oklch(1 0 0);
+  --schedule-weekday-b: oklch(0.94 0.014 245);
+  --schedule-weekday-b-border: oklch(0.82 0.025 245);
+  --schedule-weekend: oklch(0.94 0.04 18);
+  --schedule-weekend-border: oklch(0.76 0.105 18);
+  --schedule-weekend-foreground: oklch(0.36 0.095 18);
+  --schedule-weekday-a-stripe: oklch(0.83 0.022 245);
+  --schedule-weekday-b-stripe: oklch(0.68 0.05 245);
+  --schedule-today: oklch(0.965 0.035 350);
+  --schedule-today-border: oklch(0.72 0.12 350);
+  --schedule-today-foreground: oklch(0.34 0.09 350);
 }
 
 @theme inline {
@@ -76,6 +87,17 @@
   --input: oklch(0.33 0.022 286);
   --app-surface: oklch(0.145 0.014 286);
   --app-soft: oklch(0.27 0.028 330);
+  --schedule-weekday-a: oklch(0.225 0.02 286);
+  --schedule-weekday-b: oklch(0.305 0.022 286);
+  --schedule-weekday-b-border: oklch(0.43 0.026 286);
+  --schedule-weekend: oklch(0.34 0.055 18);
+  --schedule-weekend-border: oklch(0.61 0.105 18);
+  --schedule-weekend-foreground: oklch(0.93 0.04 18);
+  --schedule-weekday-a-stripe: oklch(0.42 0.026 286);
+  --schedule-weekday-b-stripe: oklch(0.56 0.05 245);
+  --schedule-today: oklch(0.34 0.055 350);
+  --schedule-today-border: oklch(0.62 0.11 350);
+  --schedule-today-foreground: oklch(0.96 0.02 350);
 }
 
 * {
@@ -122,4 +144,129 @@ summary,
 
 ::selection {
   background: color-mix(in oklch, var(--primary) 22%, transparent);
+}
+
+.schedule-day-tone-weekday-a {
+  --schedule-day-stripe: var(--schedule-weekday-a-stripe);
+  background-color: var(--schedule-weekday-a);
+  border-color: var(--border);
+}
+
+.schedule-day-tone-weekday-b {
+  --schedule-day-stripe: var(--schedule-weekday-b-stripe);
+  background-color: var(--schedule-weekday-b);
+  border-color: var(--schedule-weekday-b-border);
+}
+
+.schedule-day-tone-weekend {
+  --schedule-day-stripe: var(--schedule-weekend-border);
+  background-color: var(--schedule-weekend);
+  border-color: var(--schedule-weekend-border);
+  color: var(--schedule-weekend-foreground);
+}
+
+.schedule-day-tone-today {
+  --schedule-day-stripe: var(--schedule-today-border);
+  background-color: var(--schedule-today);
+  border-color: var(--schedule-today-border);
+  color: var(--schedule-today-foreground);
+}
+
+.schedule-day-section {
+  position: relative;
+  overflow: hidden;
+}
+
+.schedule-day-section::before {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 4px;
+  background-color: var(--schedule-day-stripe);
+  content: '';
+}
+
+.schedule-day-section > * {
+  position: relative;
+}
+
+[data-slot='dialog-overlay'][data-state='open'] {
+  animation: dialog-overlay-in 180ms ease-out;
+}
+
+[data-slot='dialog-overlay'][data-state='closed'] {
+  animation: dialog-overlay-out 150ms ease-in;
+}
+
+[data-slot='dialog-content'][data-state='open'] {
+  animation: dialog-content-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom center;
+}
+
+[data-slot='dialog-content'][data-state='closed'] {
+  animation: dialog-content-out 150ms cubic-bezier(0.4, 0, 1, 1);
+  transform-origin: bottom center;
+}
+
+@keyframes dialog-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-overlay-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-content-in {
+  from {
+    filter: blur(3px);
+    opacity: 0;
+    scale: 0.97;
+    translate: var(--tw-translate-x) calc(var(--tw-translate-y) + 0.75rem);
+  }
+
+  to {
+    filter: blur(0);
+    opacity: 1;
+    scale: 1;
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+}
+
+@keyframes dialog-content-out {
+  from {
+    opacity: 1;
+    scale: 1;
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+
+  to {
+    opacity: 0;
+    scale: 0.98;
+    translate: var(--tw-translate-x) calc(var(--tw-translate-y) + 0.5rem);
+  }
+}
+
+@media (width >= 40rem) {
+  [data-slot='dialog-content'][data-state] {
+    transform-origin: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='dialog-overlay'][data-state],
+  [data-slot='dialog-content'][data-state] {
+    animation-duration: 1ms;
+  }
 }

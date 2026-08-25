@@ -11,6 +11,7 @@ import {
   Copy,
   MessageSquareText,
   Pencil,
+  Plus,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -103,6 +104,7 @@ export function WorkerScheduleScreen() {
   const [addSessionDate, setAddSessionDate] = React.useState<string | null>(null);
   const touchStartX = React.useRef<number | null>(null);
   const baseWeekStart = React.useMemo(() => getStartOfWeek(new Date()), []);
+  const todayKey = React.useMemo(() => toDateKey(new Date()), []);
   const weekStart = addWeeks(baseWeekStart, weekOffset);
   const weekDays = getWeekDays(weekStart);
   const dateFrom = toDateKey(weekDays[0]);
@@ -235,20 +237,35 @@ export function WorkerScheduleScreen() {
           <ChevronLeft />
         </Button>
         <div className="grid grid-cols-7 gap-1">
-          {weekDays.map((day) => (
-            <div
-              key={toDateKey(day)}
-              className={cn(
-                'flex min-h-14 flex-col items-center justify-center rounded-md border bg-card text-center',
-                isWeekend(day) && 'border-primary/20 bg-primary/5 text-primary',
-              )}
-            >
-              <span className="text-[11px] font-medium uppercase text-muted-foreground">
-                {formatShortWeekday(day)}
-              </span>
-              <span className="text-sm font-semibold">{day.getDate()}</span>
-            </div>
-          ))}
+          {weekDays.map((day) => {
+            const dateKey = toDateKey(day);
+            const isToday = dateKey === todayKey;
+
+            return (
+              <button
+                type="button"
+                key={dateKey}
+                className={cn(
+                  'flex min-h-14 flex-col items-center justify-center rounded-md border text-center transition-colors outline-none hover:-translate-y-0.5 hover:shadow-xs focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50',
+                  getWeekStripDayTone(day, isToday),
+                  isToday && 'ring-1 ring-primary/35',
+                )}
+                title="Добавить смену в этот день"
+                disabled={isAddSessionDisabled}
+                onClick={() => openAddSessionDialog(dateKey)}
+              >
+                <span
+                  className={cn(
+                    'text-[11px] font-medium uppercase',
+                    isWeekend(day) ? 'text-current' : 'text-muted-foreground',
+                  )}
+                >
+                  {formatShortWeekday(day)}
+                </span>
+                <span className="text-sm font-semibold">{day.getDate()}</span>
+              </button>
+            );
+          })}
         </div>
         <Button
           variant="outline"
@@ -282,8 +299,9 @@ export function WorkerScheduleScreen() {
 
       <div className="grid gap-3 lg:grid-cols-[1fr_18rem]">
         <div className="space-y-3">
-          {weekDays.map((day) => {
+          {weekDays.map((day, index) => {
             const dateKey = toDateKey(day);
+            const isToday = dateKey === todayKey;
             const daySessions = weekSessions.filter((session) => session.workDate === dateKey);
             const confirmedDayHours = sum(
               daySessions
@@ -292,10 +310,22 @@ export function WorkerScheduleScreen() {
             );
 
             return (
-              <section key={dateKey} className="rounded-lg border border-border bg-card p-3">
+              <section
+                key={dateKey}
+                className={cn(
+                  'schedule-day-section rounded-lg border p-3 transition-colors',
+                  getScheduleListDayTone(day, index),
+                  isToday && 'ring-1 ring-primary/35',
+                )}
+              >
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-semibold capitalize">{formatFullWeekday(day)}</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-semibold capitalize">
+                        {formatFullWeekday(day)}
+                      </h2>
+                      {isToday && <Badge variant="default">Сегодня</Badge>}
+                    </div>
                     <p className="text-sm text-muted-foreground">{formatDay(day)}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -324,16 +354,6 @@ export function WorkerScheduleScreen() {
                   {!isScheduleLoading && daySessions.length === 0 && (
                     <div className="rounded-md border border-dashed border-border px-3 py-4 text-center">
                       <p className="text-sm text-muted-foreground">Свободный день</p>
-                      <Button
-                        className="mt-3"
-                        size="sm"
-                        variant="soft"
-                        disabled={isAddSessionDisabled}
-                        onClick={() => openAddSessionDialog(dateKey)}
-                      >
-                        <CalendarPlus />
-                        Добавить смену
-                      </Button>
                     </div>
                   )}
 
@@ -353,6 +373,22 @@ export function WorkerScheduleScreen() {
                       />
                     );
                   })}
+
+                  {!isScheduleLoading && (
+                    <div className="flex justify-center pt-1">
+                      <Button
+                        size="icon"
+                        variant="soft"
+                        className="size-8 rounded-full border border-primary/20 bg-background/70 shadow-xs"
+                        title="Добавить смену в этот день"
+                        aria-label="Добавить смену в этот день"
+                        disabled={isAddSessionDisabled}
+                        onClick={() => openAddSessionDialog(dateKey)}
+                      >
+                        <Plus />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </section>
             );
@@ -960,6 +996,26 @@ function getStartOfWeek(date: Date) {
   const diff = day === 0 ? -6 : 1 - day;
 
   return addDays(new Date(date.getFullYear(), date.getMonth(), date.getDate()), diff);
+}
+
+function getWeekStripDayTone(day: Date, isToday: boolean) {
+  if (isToday) {
+    return 'schedule-day-tone-today';
+  }
+
+  if (isWeekend(day)) {
+    return 'schedule-day-tone-weekend';
+  }
+
+  return 'schedule-day-tone-weekday-a';
+}
+
+function getScheduleListDayTone(day: Date, index: number) {
+  if (isWeekend(day)) {
+    return 'schedule-day-tone-weekend';
+  }
+
+  return index % 2 === 0 ? 'schedule-day-tone-weekday-a' : 'schedule-day-tone-weekday-b';
 }
 
 function getSessionFormDefaults(session: WorkSession): WorkSessionFormValues {

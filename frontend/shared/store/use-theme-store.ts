@@ -14,6 +14,8 @@ export const accentPalettes: Record<
     ring: string;
     accent: string;
     appSoft: string;
+    darkAccent: string;
+    darkAppSoft: string;
   }
 > = {
   rose: {
@@ -22,6 +24,8 @@ export const accentPalettes: Record<
     ring: 'oklch(0.68 0.18 350)',
     accent: 'oklch(0.955 0.028 350)',
     appSoft: 'oklch(0.94 0.035 350)',
+    darkAccent: 'oklch(0.31 0.045 350)',
+    darkAppSoft: 'oklch(0.27 0.038 350)',
   },
   coral: {
     label: 'Коралл',
@@ -29,6 +33,8 @@ export const accentPalettes: Record<
     ring: 'oklch(0.69 0.17 25)',
     accent: 'oklch(0.955 0.028 25)',
     appSoft: 'oklch(0.94 0.04 25)',
+    darkAccent: 'oklch(0.31 0.045 25)',
+    darkAppSoft: 'oklch(0.27 0.04 25)',
   },
   lilac: {
     label: 'Лилак',
@@ -36,6 +42,8 @@ export const accentPalettes: Record<
     ring: 'oklch(0.63 0.17 305)',
     accent: 'oklch(0.95 0.032 305)',
     appSoft: 'oklch(0.93 0.04 305)',
+    darkAccent: 'oklch(0.31 0.048 305)',
+    darkAppSoft: 'oklch(0.27 0.042 305)',
   },
   mint: {
     label: 'Мята',
@@ -43,6 +51,8 @@ export const accentPalettes: Record<
     ring: 'oklch(0.61 0.13 170)',
     accent: 'oklch(0.95 0.03 170)',
     appSoft: 'oklch(0.93 0.04 170)',
+    darkAccent: 'oklch(0.31 0.04 170)',
+    darkAppSoft: 'oklch(0.27 0.036 170)',
   },
 };
 
