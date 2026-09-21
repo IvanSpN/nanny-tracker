@@ -75,6 +75,8 @@ const workSessionFormSchema = z.object({
   clientId: z.string().min(1, 'Выберите клиента'),
   workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Укажите дату'),
   hours: z.coerce.number().min(0.25, 'Минимум 15 минут').max(24, 'Максимум 24 часа'),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Укажите время начала'),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Укажите время окончания'),
   dayType: z.enum(['normal', 'holiday']),
   comment: z
     .string()
@@ -102,7 +104,7 @@ export function WorkerScheduleScreen() {
   const [copyError, setCopyError] = React.useState<string | null>(null);
   const [noClientsMessage, setNoClientsMessage] = React.useState<string | null>(null);
   const [addSessionDate, setAddSessionDate] = React.useState<string | null>(null);
-  const touchStartX = React.useRef<number | null>(null);
+  const touchStart = React.useRef<{ x: number; y: number } | null>(null);
   const baseWeekStart = React.useMemo(() => getStartOfWeek(new Date()), []);
   const todayKey = React.useMemo(() => toDateKey(new Date()), []);
   const weekStart = addWeeks(baseWeekStart, weekOffset);
@@ -154,7 +156,8 @@ export function WorkerScheduleScreen() {
         await copyWorkSessionMutation.mutateAsync({
           clientId: session.clientId,
           workDate: toDateKey(addDays(parseDate(session.workDate), 7)),
-          hours: session.hours,
+          startTime: session.startTime,
+          endTime: session.endTime,
           rateType: isManualHoliday(session) ? 'weekend' : undefined,
           comment: session.comment,
         });
@@ -170,20 +173,24 @@ export function WorkerScheduleScreen() {
     <section
       className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6"
       onTouchStart={(event) => {
-        touchStartX.current = event.touches[0]?.clientX ?? null;
+        const touch = event.touches[0];
+        touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
       }}
       onTouchEnd={(event) => {
-        if (touchStartX.current === null) {
+        const start = touchStart.current;
+        const touch = event.changedTouches[0];
+        touchStart.current = null;
+
+        if (!start || !touch) {
           return;
         }
 
-        const delta = event.changedTouches[0].clientX - touchStartX.current;
+        const deltaX = touch.clientX - start.x;
+        const deltaY = touch.clientY - start.y;
 
-        if (Math.abs(delta) > 56) {
-          setWeekOffset((current) => current + (delta < 0 ? 1 : -1));
+        if (Math.abs(deltaX) > 56 && Math.abs(deltaX) > Math.abs(deltaY)) {
+          setWeekOffset((current) => current + (deltaX < 0 ? 1 : -1));
         }
-
-        touchStartX.current = null;
       }}
     >
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -303,11 +310,11 @@ export function WorkerScheduleScreen() {
             const dateKey = toDateKey(day);
             const isToday = dateKey === todayKey;
             const daySessions = weekSessions.filter((session) => session.workDate === dateKey);
-            const confirmedDayHours = sum(
-              daySessions
-                .filter((session) => session.status === 'confirmed')
-                .map((session) => session.hours),
+            const confirmedDaySessions = daySessions.filter(
+              (session) => session.status === 'confirmed',
             );
+            const confirmedDayHours = sum(confirmedDaySessions.map((session) => session.hours));
+            const confirmedDayMoney = sum(confirmedDaySessions.map((session) => session.amount));
 
             return (
               <section
@@ -338,9 +345,14 @@ export function WorkerScheduleScreen() {
                     >
                       <CalendarPlus />
                     </Button>
-                    <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
-                      {formatHours(confirmedDayHours)}
-                    </Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
+                        {formatHours(confirmedDayHours)}
+                      </Badge>
+                      <Badge variant={confirmedDayMoney > 0 ? 'success' : 'muted'}>
+                        {formatMoney(confirmedDayMoney)}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
 
@@ -447,13 +459,15 @@ function Metric({
   icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <Card>
-      <CardContent className="p-3">
+    <Card className="min-w-0">
+      <CardContent className="min-w-0 p-3">
         <div className="mb-2 flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Icon className="size-4" />
         </div>
         <p className="text-xs font-medium text-muted-foreground">{title}</p>
-        <p className="text-lg font-semibold">{value}</p>
+        <p className="min-w-0 break-words text-base leading-tight font-semibold sm:text-lg">
+          {value}
+        </p>
       </CardContent>
     </Card>
   );
@@ -498,7 +512,8 @@ function WorkSessionRow({
           </Badge>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          {formatHours(session.hours)} · {formatMoney(session.rateValue)}/ч
+          с {session.startTime} до {session.endTime} · {formatHours(session.hours)} ·{' '}
+          {formatMoney(session.rateValue)}/ч
         </p>
         {session.comment && (
           <p className="mt-2 line-clamp-3 rounded-md bg-muted/70 px-2 py-1.5 text-xs text-muted-foreground">
@@ -735,6 +750,8 @@ function AddWorkSessionDialog({
       clientId: clients[0]?.id ?? '',
       workDate: defaultDate,
       hours: 4,
+      startTime: '10:00',
+      endTime: '14:00',
       dayType: 'normal',
       comment: '',
     },
@@ -755,7 +772,8 @@ function AddWorkSessionDialog({
       await createWorkSessionMutation.mutateAsync({
         clientId: values.clientId,
         workDate: values.workDate,
-        hours: values.hours,
+        startTime: values.startTime,
+        endTime: values.endTime,
         rateType: toRateType(values.dayType),
         comment: values.comment?.trim() || null,
       });
@@ -765,6 +783,8 @@ function AddWorkSessionDialog({
         clientId: values.clientId,
         workDate: values.workDate,
         hours: 4,
+        startTime: '10:00',
+        endTime: '14:00',
         dayType: 'normal',
         comment: '',
       });
@@ -838,7 +858,8 @@ function EditWorkSessionDialog({
         payload: {
           clientId: values.clientId,
           workDate: values.workDate,
-          hours: values.hours,
+          startTime: values.startTime,
+          endTime: values.endTime,
           rateType: toRateType(values.dayType),
           comment: values.comment?.trim() || null,
         },
@@ -903,6 +924,19 @@ function WorkSessionFormFields({
       control: form.control,
       name: 'comment',
     }) ?? '';
+  const hoursField = form.register('hours');
+  const startTimeField = form.register('startTime');
+  const endTimeField = form.register('endTime');
+
+  const updateEndTime = (startTime: string, hours: unknown) => {
+    const durationMinutes = Math.round(Number(hours) * 60);
+
+    if (isTime(startTime) && durationMinutes >= 15 && durationMinutes <= 24 * 60) {
+      form.setValue('endTime', addMinutesToTime(startTime, durationMinutes), {
+        shouldValidate: true,
+      });
+    }
+  };
 
   return (
     <>
@@ -932,20 +966,88 @@ function WorkSessionFormFields({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="shift-date">Дата</Label>
-          <Input id="shift-date" type="date" {...form.register('workDate')} />
+          <Input
+            className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+            id="shift-date"
+            type="date"
+            {...form.register('workDate')}
+          />
           {form.formState.errors.workDate && (
             <p className="text-xs text-destructive">{form.formState.errors.workDate.message}</p>
           )}
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="shift-hours">Часы</Label>
-          <Input id="shift-hours" type="number" step="0.25" {...form.register('hours')} />
+          <Input
+            id="shift-hours"
+            type="number"
+            min="0.25"
+            max="24"
+            step="0.25"
+            className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+            {...hoursField}
+            onChange={(event) => {
+              hoursField.onChange(event);
+              updateEndTime(form.getValues('startTime'), event.target.value);
+            }}
+          />
           {form.formState.errors.hours && (
             <p className="text-xs text-destructive">{form.formState.errors.hours.message}</p>
           )}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Время смены</Label>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0 space-y-2">
+            <Label className="text-xs text-muted-foreground" htmlFor="shift-start-time">
+              С
+            </Label>
+            <Input
+              id="shift-start-time"
+              type="time"
+              className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+              {...startTimeField}
+              onChange={(event) => {
+                startTimeField.onChange(event);
+                updateEndTime(event.target.value, form.getValues('hours'));
+              }}
+            />
+            {form.formState.errors.startTime && (
+              <p className="text-xs text-destructive">{form.formState.errors.startTime.message}</p>
+            )}
+          </div>
+          <div className="min-w-0 space-y-2">
+            <Label className="text-xs text-muted-foreground" htmlFor="shift-end-time">
+              До
+            </Label>
+            <Input
+              id="shift-end-time"
+              type="time"
+              className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+              {...endTimeField}
+              onChange={(event) => {
+                endTimeField.onChange(event);
+                const startTime = form.getValues('startTime');
+
+                if (isTime(startTime) && isTime(event.target.value)) {
+                  form.setValue('hours', getDurationInMinutes(startTime, event.target.value) / 60, {
+                    shouldValidate: true,
+                  });
+                }
+              }}
+            />
+            {form.formState.errors.endTime && (
+              <p className="text-xs text-destructive">{form.formState.errors.endTime.message}</p>
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Измените часы или время «с» — время «до» пересчитается автоматически.
+        </p>
       </div>
 
       <div className="space-y-2">
@@ -1023,9 +1125,33 @@ function getSessionFormDefaults(session: WorkSession): WorkSessionFormValues {
     clientId: session.clientId,
     workDate: session.workDate,
     hours: session.hours,
+    startTime: session.startTime,
+    endTime: session.endTime,
     dayType: isManualHoliday(session) ? 'holiday' : 'normal',
     comment: session.comment ?? '',
   };
+}
+
+function isTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function addMinutesToTime(time: string, minutes: number): string {
+  const [hours, timeMinutes] = time.split(':').map(Number);
+  const totalMinutes = (hours * 60 + timeMinutes + minutes) % (24 * 60);
+
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(
+    totalMinutes % 60,
+  ).padStart(2, '0')}`;
+}
+
+function getDurationInMinutes(startTime: string, endTime: string): number {
+  const [startHours, startMinutes] = startTime.split(':').map(Number);
+  const [endHours, endMinutes] = endTime.split(':').map(Number);
+  const start = startHours * 60 + startMinutes;
+  const end = endHours * 60 + endMinutes;
+
+  return (end - start + 24 * 60) % (24 * 60) || 24 * 60;
 }
 
 function toRateType(dayType: WorkSessionFormValues['dayType']): WorkSessionRateType | undefined {

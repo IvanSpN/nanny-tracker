@@ -15,6 +15,8 @@ type WorkSessionDto = {
     name: string;
   };
   workDate: string;
+  startTime: string;
+  endTime: string;
   workedMinutes: number;
   hours: number;
   rateType: 'regular' | 'weekend';
@@ -103,6 +105,8 @@ function isWorkSessionDto(value: unknown): value is WorkSessionDto {
     typeof value.client.id === 'string' &&
     typeof value.client.name === 'string' &&
     typeof value.workDate === 'string' &&
+    typeof value.startTime === 'string' &&
+    typeof value.endTime === 'string' &&
     typeof value.workedMinutes === 'number' &&
     typeof value.hours === 'number' &&
     (value.rateType === 'regular' || value.rateType === 'weekend') &&

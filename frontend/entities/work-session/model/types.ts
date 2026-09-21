@@ -11,6 +11,8 @@ export type WorkSession = {
   clientId: string;
   client: WorkSessionClient;
   workDate: string;
+  startTime: string;
+  endTime: string;
   workedMinutes: number;
   hours: number;
   rateType: WorkSessionRateType;
@@ -29,7 +31,8 @@ export type WorkSessionsRangeParams = {
 export type CreateWorkSessionPayload = {
   clientId: string;
   workDate: string;
-  hours: number;
+  startTime: string;
+  endTime: string;
   rateType?: WorkSessionRateType;
   comment?: string | null;
 };
