@@ -80,6 +80,16 @@ const workSessionResponseSchema = {
       format: 'date',
       example: '2026-07-13',
     },
+    startTime: {
+      type: 'string',
+      pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+      example: '10:00',
+    },
+    endTime: {
+      type: 'string',
+      pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+      example: '14:30',
+    },
     workedMinutes: {
       type: 'number',
       example: 270,

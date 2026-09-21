@@ -1,16 +1,13 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
-  Max,
   MaxLength,
-  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WorkSessionRateType } from '../models/work-sessions';
@@ -46,18 +43,20 @@ export class CreateWorkSessionDto {
   workDate!: string;
 
   @ApiProperty({
-    example: 4.5,
-    description: 'Количество часов в смене',
-    minimum: 0.25,
-    maximum: 24,
+    example: '10:00',
+    description: 'Время начала смены',
   })
-  @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
+  @Transform(trimString)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  startTime!: string;
+
+  @ApiProperty({
+    example: '14:30',
+    description: 'Время окончания смены. Окончание раньше начала означает следующий день.',
   })
-  @Min(0.25)
-  @Max(24)
-  hours!: number;
+  @Transform(trimString)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  endTime!: string;
 
   @ApiPropertyOptional({
     enum: WorkSessionRateType,

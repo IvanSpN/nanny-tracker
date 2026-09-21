@@ -77,6 +77,20 @@ export class WorkSession extends Model {
 
   @AllowNull(false)
   @Column({
+    type: DataType.TIME,
+    field: 'start_time',
+  })
+  declare startTime: string;
+
+  @AllowNull(false)
+  @Column({
+    type: DataType.TIME,
+    field: 'end_time',
+  })
+  declare endTime: string;
+
+  @AllowNull(false)
+  @Column({
     type: DataType.INTEGER,
     field: 'worked_minutes',
   })

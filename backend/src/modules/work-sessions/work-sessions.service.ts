@@ -20,6 +20,8 @@ type WorkSessionResponse = {
   clientId: string;
   client: WorkSessionClientResponse;
   workDate: string;
+  startTime: string;
+  endTime: string;
   workedMinutes: number;
   hours: number;
   rateType: WorkSessionRateType;
@@ -43,7 +45,7 @@ export class WorkSessionsService {
   async createForWorker(userId: string, dto: CreateWorkSessionDto): Promise<WorkSessionResponse> {
     const worker = await this.getWorkerByUserId(userId);
     const client = await this.findOwnedClient(worker.id, dto.clientId);
-    const workedMinutes = this.hoursToMinutes(dto.hours);
+    const workedMinutes = this.calculateWorkedMinutes(dto.startTime, dto.endTime);
     const rateType = this.resolveRateType(dto.workDate, dto.rateType);
     const rateValue = this.getRateValue(client, rateType);
     const amount = this.calculateAmount(rateValue, workedMinutes);
@@ -52,6 +54,8 @@ export class WorkSessionsService {
       workerId: worker.id,
       clientId: client.id,
       workDate: dto.workDate,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
       workedMinutes,
       rateType,
       rateValue,
@@ -137,8 +141,9 @@ export class WorkSessionsService {
         ? await this.findOwnedClient(worker.id, dto.clientId)
         : workSession.client;
     const workDate = dto.workDate ?? workSession.workDate;
-    const workedMinutes =
-      dto.hours === undefined ? workSession.workedMinutes : this.hoursToMinutes(dto.hours);
+    const startTime = dto.startTime ?? workSession.startTime;
+    const endTime = dto.endTime ?? workSession.endTime;
+    const workedMinutes = this.calculateWorkedMinutes(startTime, endTime);
     const requestedRateType = dto.rateType ?? (dto.workDate ? undefined : workSession.rateType);
     const rateType = this.resolveRateType(workDate, requestedRateType);
     const rateValue = this.getRateValue(client, rateType);
@@ -147,6 +152,8 @@ export class WorkSessionsService {
     await workSession.update({
       clientId: client.id,
       workDate,
+      startTime,
+      endTime,
       workedMinutes,
       rateType,
       rateValue,
@@ -244,14 +251,23 @@ export class WorkSessionsService {
     return workSession;
   }
 
-  private hoursToMinutes(hours: number): number {
-    const workedMinutes = Math.round(hours * 60);
+  private calculateWorkedMinutes(startTime: string, endTime: string): number {
+    const startMinutes = this.timeToMinutes(startTime);
+    const endMinutes = this.timeToMinutes(endTime);
 
-    if (workedMinutes < 1 || workedMinutes > 24 * 60) {
-      throw new BadRequestException('Количество часов должно быть в диапазоне от 0.25 до 24');
+    const workedMinutes = (endMinutes - startMinutes + 24 * 60) % (24 * 60) || 24 * 60;
+
+    if (workedMinutes < 15) {
+      throw new BadRequestException('Минимальная продолжительность смены — 15 минут');
     }
 
     return workedMinutes;
+  }
+
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+
+    return hours * 60 + minutes;
   }
 
   private resolveRateType(
@@ -313,6 +329,8 @@ export class WorkSessionsService {
         name: workSession.client.name,
       },
       workDate: workSession.workDate,
+      startTime: workSession.startTime.slice(0, 5),
+      endTime: workSession.endTime.slice(0, 5),
       workedMinutes: workSession.workedMinutes,
       hours: workSession.workedMinutes / 60,
       rateType: workSession.rateType,
