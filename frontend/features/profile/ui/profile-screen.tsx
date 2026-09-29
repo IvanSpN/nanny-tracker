@@ -131,7 +131,7 @@ export function ProfileScreen() {
             <Card>
               <CardContent>
                 <p className="text-sm text-muted-foreground">Валюта</p>
-                <p className="mt-1 font-semibold">KZT</p>
+                <p className="mt-1 font-semibold">тг</p>
               </CardContent>
             </Card>
           </div>

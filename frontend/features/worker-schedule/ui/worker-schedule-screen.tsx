@@ -339,6 +339,10 @@ export function WorkerScheduleScreen() {
             const confirmedDayMoney = sum(
               confirmedDaySessions.map((session) => session.totalAmount),
             );
+            const plannedDaySessions = daySessions.filter(
+              (session) => session.status === 'pending',
+            );
+            const plannedDayMoney = sum(plannedDaySessions.map((session) => session.totalAmount));
 
             return (
               <section
@@ -369,13 +373,24 @@ export function WorkerScheduleScreen() {
                     >
                       <CalendarPlus />
                     </Button>
-                    <div className="flex items-center gap-1">
-                      <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
-                        {formatHours(confirmedDayHours)}
-                      </Badge>
-                      <Badge variant={confirmedDayMoney > 0 ? 'success' : 'muted'}>
-                        {formatMoney(confirmedDayMoney)}
-                      </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-1">
+                        <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
+                          {formatHours(confirmedDayHours)}
+                        </Badge>
+                        <Badge variant={confirmedDayMoney > 0 ? 'success' : 'muted'}>
+                          {formatMoney(confirmedDayMoney)}
+                        </Badge>
+                      </div>
+                      {plannedDaySessions.length > 0 && (
+                        <p
+                          className="cursor-help text-xs leading-tight font-light text-muted-foreground"
+                          title="Планируемый доход: смены этого дня, которые ещё не подтверждены"
+                          aria-label={`Планируемый доход ${formatMoney(plannedDayMoney)}`}
+                        >
+                          ≈&nbsp;{formatMoney(plannedDayMoney)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

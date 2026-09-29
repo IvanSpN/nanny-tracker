@@ -1,11 +1,10 @@
 const formatter = new Intl.NumberFormat('ru-RU', {
-  style: 'currency',
-  currency: 'KZT',
   maximumFractionDigits: 0,
 });
 
+/** «4 000 тг» — неразрывный пробел, чтобы «тг» не переносилось отдельно. */
 export function formatMoney(value: number) {
-  return formatter.format(value);
+  return `${formatter.format(value)} тг`;
 }
 
 export function formatHours(value: number) {
