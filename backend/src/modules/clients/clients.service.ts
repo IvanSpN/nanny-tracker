@@ -1,11 +1,17 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { UniqueConstraintError } from 'sequelize';
+import { Transaction, UniqueConstraintError } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import * as bcrypt from 'bcryptjs';
-import { CreateClientDto } from './dto/create-client.dto';
+import { CreateClientDto, SpecialDayDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { Client } from './models/client.model';
+import { ClientSpecialDay } from './models/client-special-day.model';
 import { User, UserRole } from '../users/models/user.model';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
@@ -18,10 +24,16 @@ type ClientResponse = {
   name: string;
   regularRate: string;
   weekendRate: string | null;
+  specialDays: ClientSpecialDayResponse[];
   phone: string | null;
   notes: string | null;
   isActive: boolean;
   isInitialPasswordChanged: boolean;
+};
+
+type ClientSpecialDayResponse = {
+  weekday: number;
+  rate: string;
 };
 
 type ClientCredentials = {
@@ -34,6 +46,8 @@ export class ClientsService {
   constructor(
     @InjectModel(Client)
     private readonly clientModel: typeof Client,
+    @InjectModel(ClientSpecialDay)
+    private readonly clientSpecialDayModel: typeof ClientSpecialDay,
     private readonly usersService: UsersService,
     private readonly workersService: WorkersService,
     private readonly sequelize: Sequelize,
@@ -44,6 +58,7 @@ export class ClientsService {
     dto: CreateClientDto,
   ): Promise<{ client: ClientResponse; credentials: ClientCredentials }> {
     const worker = await this.getWorkerByUserId(userId);
+    this.assertUniqueWeekdays(dto.specialDays);
     const password = generatePassword();
     const passwordHash = await bcrypt.hash(password, 12);
 
@@ -79,14 +94,13 @@ export class ClientsService {
             },
           );
 
-          return {
-            client,
-            isInitialPasswordChanged: user.isInitialPasswordChanged,
-          };
+          await this.replaceSpecialDays(client.id, dto.specialDays ?? [], transaction);
+
+          return client;
         });
 
         return {
-          client: this.toClientResponse(client.client, client.isInitialPasswordChanged),
+          client: this.toClientResponse(await this.findOwnedClient(worker.id, client.id)),
           credentials: {
             login,
             password,
@@ -110,13 +124,7 @@ export class ClientsService {
       where: {
         workerId: worker.id,
       },
-      include: [
-        {
-          model: User,
-          as: 'account',
-          attributes: ['id', 'isInitialPasswordChanged'],
-        },
-      ],
+      include: this.clientIncludes,
       order: [['createdAt', 'DESC']],
     });
 
@@ -135,13 +143,7 @@ export class ClientsService {
       where: {
         userId,
       },
-      include: [
-        {
-          model: User,
-          as: 'account',
-          attributes: ['id', 'isInitialPasswordChanged'],
-        },
-      ],
+      include: this.clientIncludes,
     });
 
     if (!client) {
@@ -154,14 +156,24 @@ export class ClientsService {
   async updateForWorker(userId: string, id: string, dto: UpdateClientDto): Promise<ClientResponse> {
     const worker = await this.getWorkerByUserId(userId);
     const client = await this.findOwnedClient(worker.id, id);
+    this.assertUniqueWeekdays(dto.specialDays);
 
-    await client.update({
-      name: dto.name === undefined ? client.name : dto.name.trim(),
-      regularRate: dto.regularRate === undefined ? client.regularRate : dto.regularRate,
-      weekendRate:
-        dto.weekendRate === undefined ? client.weekendRate : dto.weekendRate?.trim() || null,
-      phone: dto.phone === undefined ? client.phone : dto.phone?.trim() || null,
-      notes: dto.notes === undefined ? client.notes : dto.notes?.trim() || null,
+    await this.sequelize.transaction(async (transaction) => {
+      await client.update(
+        {
+          name: dto.name === undefined ? client.name : dto.name.trim(),
+          regularRate: dto.regularRate === undefined ? client.regularRate : dto.regularRate,
+          weekendRate:
+            dto.weekendRate === undefined ? client.weekendRate : dto.weekendRate?.trim() || null,
+          phone: dto.phone === undefined ? client.phone : dto.phone?.trim() || null,
+          notes: dto.notes === undefined ? client.notes : dto.notes?.trim() || null,
+        },
+        { transaction },
+      );
+
+      if (dto.specialDays !== undefined) {
+        await this.replaceSpecialDays(client.id, dto.specialDays, transaction);
+      }
     });
 
     return this.toClientResponse(await this.findOwnedClient(worker.id, id));
@@ -194,6 +206,55 @@ export class ClientsService {
     };
   }
 
+  private get clientIncludes() {
+    return [
+      {
+        model: User,
+        as: 'account',
+        attributes: ['id', 'isInitialPasswordChanged'],
+      },
+      {
+        model: ClientSpecialDay,
+        as: 'specialDays',
+        attributes: ['weekday', 'rate'],
+      },
+    ];
+  }
+
+  private assertUniqueWeekdays(specialDays?: SpecialDayDto[]): void {
+    if (!specialDays) {
+      return;
+    }
+
+    const weekdays = new Set(specialDays.map((specialDay) => specialDay.weekday));
+
+    if (weekdays.size !== specialDays.length) {
+      throw new BadRequestException('День недели указан дважды');
+    }
+  }
+
+  private async replaceSpecialDays(
+    clientId: string,
+    specialDays: SpecialDayDto[],
+    transaction: Transaction,
+  ): Promise<void> {
+    await this.clientSpecialDayModel.destroy({
+      where: {
+        clientId,
+      },
+      transaction,
+    });
+
+    await this.clientSpecialDayModel.bulkCreate(
+      specialDays.map((specialDay) => ({
+        clientId,
+        weekday: specialDay.weekday,
+        rate: specialDay.rate,
+      })),
+      { transaction },
+    );
+  }
+
   private async getWorkerByUserId(userId: string): Promise<Worker> {
     const worker = await this.workersService.findByUserId(userId);
 
@@ -210,13 +271,7 @@ export class ClientsService {
         id,
         workerId,
       },
-      include: [
-        {
-          model: User,
-          as: 'account',
-          attributes: ['id', 'isInitialPasswordChanged'],
-        },
-      ],
+      include: this.clientIncludes,
     });
 
     if (!client) {
@@ -239,19 +294,22 @@ export class ClientsService {
     throw new ConflictException('Не удалось сгенерировать уникальный логин клиента');
   }
 
-  private toClientResponse(
-    client: Client,
-    isInitialPasswordChanged = client.account?.isInitialPasswordChanged ?? true,
-  ): ClientResponse {
+  private toClientResponse(client: Client): ClientResponse {
     return {
       id: client.id,
       name: client.name,
       regularRate: client.regularRate,
       weekendRate: client.weekendRate,
+      specialDays: (client.specialDays ?? [])
+        .map((specialDay) => ({
+          weekday: specialDay.weekday,
+          rate: specialDay.rate,
+        }))
+        .sort((first, second) => first.weekday - second.weekday),
       phone: client.phone,
       notes: client.notes,
       isActive: client.isActive,
-      isInitialPasswordChanged,
+      isInitialPasswordChanged: client.account?.isInitialPasswordChanged ?? true,
     };
   }
 }

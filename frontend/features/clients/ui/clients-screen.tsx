@@ -2,8 +2,8 @@
 
 import * as React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { KeyRound, Pencil, Plus, Search, ShieldCheck } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { CalendarDays, KeyRound, Pencil, Plus, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { Controller, useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +18,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   useCreateClientMutation,
@@ -28,10 +35,14 @@ import { useClientsQuery } from '@/entities/client/api/client.queries';
 import type { ClientCredentials, WorkerClient } from '@/entities/client/model/types';
 import {
   createClientSchema,
+  specialDaySchema,
   type CreateClientFormInput,
   type CreateClientFormValues,
+  type SpecialDayFormInput,
+  type SpecialDayFormValues,
 } from '@/features/clients/model/schemas';
 import { getApiErrorMessage } from '@/shared/api/http-client';
+import { getWeekdayLabel, WEEKDAY_OPTIONS } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
 
@@ -223,6 +234,33 @@ function ClientDetails({ client }: { client: WorkerClient }) {
       </div>
 
       <section className="rounded-lg border border-border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="size-4 text-primary" />
+            <h3 className="font-semibold">Особые дни</h3>
+          </div>
+          <AddSpecialDayDialog client={client} />
+        </div>
+        {client.specialDays.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Не заданы. Ставка считается по будням и выходным.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {client.specialDays.map((specialDay) => (
+              <li
+                key={specialDay.weekday}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <span className="font-medium">{getWeekdayLabel(specialDay.weekday)}</span>
+                <span>{formatMoney(specialDay.rate)} за 1 час</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-4">
         <div className="mb-3 flex items-center gap-2">
           <ShieldCheck className="size-4 text-primary" />
           <h3 className="font-semibold">Доступ клиента</h3>
@@ -280,6 +318,7 @@ function AddClientDialog({ onCreated }: { onCreated: (client: WorkerClient) => v
       name: '',
       regularRate: 1500,
       weekendRate: 2000,
+      specialDays: [],
       notes: '',
     },
   });
@@ -290,6 +329,7 @@ function AddClientDialog({ onCreated }: { onCreated: (client: WorkerClient) => v
         name: values.name,
         regularRate: toRateString(values.regularRate),
         weekendRate: values.weekendRate ? toRateString(values.weekendRate) : null,
+        specialDays: toSpecialDaysPayload(values.specialDays),
         notes: values.notes || null,
       });
 
@@ -352,6 +392,8 @@ function AddClientDialog({ onCreated }: { onCreated: (client: WorkerClient) => v
               </div>
             </div>
 
+            <SpecialDaysFields form={form} idPrefix="special-day" />
+
             <div className="space-y-2">
               <Label htmlFor="client-notes">Комментарий</Label>
               <Textarea id="client-notes" {...form.register('notes')} />
@@ -397,6 +439,7 @@ function EditClientDialog({ client }: { client: WorkerClient }) {
           name: values.name,
           regularRate: toRateString(values.regularRate),
           weekendRate: values.weekendRate ? toRateString(values.weekendRate) : null,
+          specialDays: toSpecialDaysPayload(values.specialDays),
           notes: values.notes || null,
         },
       });
@@ -448,6 +491,8 @@ function EditClientDialog({ client }: { client: WorkerClient }) {
             </div>
           </div>
 
+          <SpecialDaysFields form={form} idPrefix="edit-special-day" />
+
           <div className="space-y-2">
             <Label htmlFor="edit-client-notes">Комментарий</Label>
             <Textarea id="edit-client-notes" {...form.register('notes')} />
@@ -467,6 +512,232 @@ function EditClientDialog({ client }: { client: WorkerClient }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
+  const [open, setOpen] = React.useState(false);
+  const updateClientMutation = useUpdateClientMutation();
+  const usedWeekdays = new Set(client.specialDays.map((specialDay) => specialDay.weekday));
+  const freeWeekdays = WEEKDAY_OPTIONS.filter((option) => !usedWeekdays.has(option.value));
+  const getDefaults = (): SpecialDayFormInput => ({
+    weekday: freeWeekdays[0]?.value ?? 1,
+    rate: client.regularRate,
+  });
+  const form = useForm<SpecialDayFormInput, unknown, SpecialDayFormValues>({
+    resolver: zodResolver(specialDaySchema),
+    defaultValues: getDefaults(),
+  });
+
+  React.useEffect(() => {
+    if (open) {
+      form.reset(getDefaults());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const submit = async (values: SpecialDayFormValues) => {
+    try {
+      await updateClientMutation.mutateAsync({
+        clientId: client.id,
+        payload: {
+          specialDays: toSpecialDaysPayload([...client.specialDays, values]),
+        },
+      });
+      setOpen(false);
+    } catch {
+      // Error is rendered from mutation state.
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          updateClientMutation.reset();
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={freeWeekdays.length === 0}
+          title={freeWeekdays.length === 0 ? 'Все дни недели уже заданы' : undefined}
+        >
+          <Plus />
+          Добавить
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+        <DialogHeader>
+          <DialogTitle>Особый день</DialogTitle>
+          <DialogDescription>
+            Цена за час в этот день недели будет важнее ставок будней, выходных и праздников.
+            Применяется к следующим сменам.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form className="space-y-4" onSubmit={form.handleSubmit(submit)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>День недели</Label>
+              <Controller
+                control={form.control}
+                name="weekday"
+                render={({ field }) => (
+                  <Select
+                    value={String(field.value)}
+                    onValueChange={(value) => field.onChange(Number(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {freeWeekdays.map((option) => (
+                        <SelectItem key={option.value} value={String(option.value)}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-special-day-rate">Цена за час</Label>
+              <Input id="quick-special-day-rate" type="number" {...form.register('rate')} />
+              {form.formState.errors.rate && (
+                <p className="text-xs text-destructive">{form.formState.errors.rate.message}</p>
+              )}
+            </div>
+          </div>
+
+          {updateClientMutation.error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {getApiErrorMessage(updateClientMutation.error)}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button type="submit" disabled={updateClientMutation.isPending}>
+              {updateClientMutation.isPending ? 'Сохраняем...' : 'Добавить'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SpecialDaysFields({
+  form,
+  idPrefix,
+}: {
+  form: UseFormReturn<CreateClientFormInput, unknown, CreateClientFormValues>;
+  idPrefix: string;
+}) {
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: 'specialDays',
+  });
+  const specialDays = useWatch({ control: form.control, name: 'specialDays' }) ?? [];
+  const usedWeekdays = new Set(specialDays.map((specialDay) => Number(specialDay.weekday)));
+  const freeWeekday = WEEKDAY_OPTIONS.find((option) => !usedWeekdays.has(option.value));
+  const errors = form.formState.errors.specialDays;
+
+  const addSpecialDay = () => {
+    if (!freeWeekday) {
+      return;
+    }
+
+    append({
+      weekday: freeWeekday.value,
+      rate: form.getValues('regularRate') ?? '',
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>Особые дни</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!freeWeekday}
+          onClick={addSpecialDay}
+        >
+          <Plus />
+          Добавить день
+        </Button>
+      </div>
+
+      {fields.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Своя цена за час в выбранный день недели. Важнее ставок будней, выходных и праздников.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((field, index) => (
+            <div key={field.id} className="space-y-1">
+              <div className="grid grid-cols-[1fr_7rem_auto] gap-2">
+                <Controller
+                  control={form.control}
+                  name={`specialDays.${index}.weekday`}
+                  render={({ field: weekdayField }) => (
+                    <Select
+                      value={String(weekdayField.value)}
+                      onValueChange={(value) => weekdayField.onChange(Number(value))}
+                    >
+                      <SelectTrigger aria-label="День недели">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WEEKDAY_OPTIONS.map((option) => (
+                          <SelectItem
+                            key={option.value}
+                            value={String(option.value)}
+                            disabled={
+                              usedWeekdays.has(option.value) &&
+                              Number(weekdayField.value) !== option.value
+                            }
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <Input
+                  id={`${idPrefix}-rate-${index}`}
+                  type="number"
+                  aria-label="Ставка за час"
+                  {...form.register(`specialDays.${index}.rate`)}
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  title="Удалить особый день"
+                  onClick={() => remove(index)}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+              {(errors?.[index]?.weekday || errors?.[index]?.rate) && (
+                <p className="text-xs text-destructive">
+                  {errors[index]?.weekday?.message ?? errors[index]?.rate?.message}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -494,11 +765,19 @@ function toRateString(value: number) {
   return value.toFixed(2);
 }
 
+function toSpecialDaysPayload(specialDays: CreateClientFormValues['specialDays']) {
+  return specialDays.map((specialDay) => ({
+    weekday: specialDay.weekday,
+    rate: toRateString(specialDay.rate),
+  }));
+}
+
 function getClientFormDefaults(client: WorkerClient): CreateClientFormValues {
   return {
     name: client.name,
     regularRate: client.regularRate,
     weekendRate: client.weekendRate ?? undefined,
+    specialDays: client.specialDays.map((specialDay) => ({ ...specialDay })),
     notes: client.notes ?? '',
   };
 }

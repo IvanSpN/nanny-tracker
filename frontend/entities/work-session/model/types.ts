@@ -1,4 +1,4 @@
-export type WorkSessionRateType = 'regular' | 'weekend';
+export type WorkSessionRateType = 'regular' | 'weekend' | 'special';
 export type WorkSessionStatus = 'pending' | 'confirmed' | 'rejected';
 
 export type WorkSessionClient = {

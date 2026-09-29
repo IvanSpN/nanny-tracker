@@ -1,8 +1,14 @@
+export type ClientSpecialDay = {
+  weekday: number;
+  rate: number;
+};
+
 export type WorkerClient = {
   id: string;
   name: string;
   regularRate: number;
   weekendRate: number | null;
+  specialDays: ClientSpecialDay[];
   phone: string | null;
   notes: string | null;
   isActive: boolean;
@@ -18,6 +24,7 @@ export type CreateClientPayload = {
   name: string;
   regularRate: string;
   weekendRate?: string | null;
+  specialDays?: { weekday: number; rate: string }[];
   phone?: string | null;
   notes?: string | null;
 };

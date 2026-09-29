@@ -61,3 +61,18 @@ export function isWeekend(value: Date) {
 
   return day === 0 || day === 6;
 }
+
+/** Дни недели по ISO: 1 — понедельник, 7 — воскресенье. */
+export const WEEKDAY_OPTIONS = [
+  { value: 1, label: 'Понедельник' },
+  { value: 2, label: 'Вторник' },
+  { value: 3, label: 'Среда' },
+  { value: 4, label: 'Четверг' },
+  { value: 5, label: 'Пятница' },
+  { value: 6, label: 'Суббота' },
+  { value: 7, label: 'Воскресенье' },
+] as const;
+
+export function getWeekdayLabel(weekday: number) {
+  return WEEKDAY_OPTIONS.find((option) => option.value === weekday)?.label ?? '';
+}

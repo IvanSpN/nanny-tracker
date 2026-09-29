@@ -7,6 +7,7 @@ import {
   Default,
   DeletedAt,
   ForeignKey,
+  HasMany,
   Model,
   PrimaryKey,
   Table,
@@ -15,6 +16,7 @@ import {
 } from 'sequelize-typescript';
 import { User } from '../../users/models/user.model';
 import { Worker } from '../../workers/models/worker.model';
+import { ClientSpecialDay } from './client-special-day.model';
 
 @Table({
   tableName: 'clients',
@@ -78,6 +80,12 @@ export class Client extends Model {
     field: 'weekend_rate',
   })
   declare weekendRate: string | null;
+
+  @HasMany(() => ClientSpecialDay, {
+    foreignKey: 'clientId',
+    as: 'specialDays',
+  })
+  declare specialDays: ClientSpecialDay[];
 
   @AllowNull(true)
   @Column({

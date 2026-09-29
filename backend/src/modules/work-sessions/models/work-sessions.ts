@@ -18,6 +18,7 @@ import { Worker } from '../../workers/models/worker.model';
 export enum WorkSessionRateType {
   REGULAR = 'regular',
   WEEKEND = 'weekend',
+  SPECIAL = 'special',
 }
 
 export enum WorkSessionStatus {

@@ -62,6 +62,7 @@ import {
   formatFullWeekday,
   formatShortWeekday,
   getWeekDays,
+  getWeekdayLabel,
   isWeekend,
   parseDate,
   toDateKey,
@@ -504,7 +505,7 @@ function WorkSessionRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-sm font-semibold">{clientName}</p>
-          <Badge variant={session.rateType === 'weekend' ? 'warning' : 'secondary'}>
+          <Badge variant={getRateBadgeVariant(session.rateType)}>
             {getRateBadgeLabel(session)}
           </Badge>
           <Badge variant={getStatusBadgeVariant(session.status)}>
@@ -512,8 +513,7 @@ function WorkSessionRow({
           </Badge>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          с {session.startTime} до {session.endTime} · {formatHours(session.hours)} ·{' '}
-          {formatMoney(session.rateValue)}/ч
+          с {session.startTime} до {session.endTime} · {formatHours(session.hours)}
         </p>
         {session.comment && (
           <p className="mt-2 line-clamp-3 rounded-md bg-muted/70 px-2 py-1.5 text-xs text-muted-foreground">
@@ -803,12 +803,12 @@ function AddWorkSessionDialog({
         }
       }}
     >
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent
+        aria-describedby={undefined}
+        className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg"
+      >
         <DialogHeader>
           <DialogTitle>Новая смена</DialogTitle>
-          <DialogDescription>
-            Смена будет сохранена в расписании текущего работника.
-          </DialogDescription>
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={form.handleSubmit(submit)}>
@@ -924,6 +924,12 @@ function WorkSessionFormFields({
       control: form.control,
       name: 'comment',
     }) ?? '';
+  const clientId = useWatch({ control: form.control, name: 'clientId' });
+  const workDate = useWatch({ control: form.control, name: 'workDate' });
+  const selectedClient = clients.find((client) => client.id === clientId);
+  const workDateWeekday = /^\d{4}-\d{2}-\d{2}$/.test(workDate ?? '')
+    ? getIsoWeekday(parseDate(workDate))
+    : null;
   const hoursField = form.register('hours');
   const startTimeField = form.register('startTime');
   const endTimeField = form.register('endTime');
@@ -962,6 +968,24 @@ function WorkSessionFormFields({
         />
         {form.formState.errors.clientId && (
           <p className="text-xs text-destructive">{form.formState.errors.clientId.message}</p>
+        )}
+        {selectedClient && selectedClient.specialDays.length > 0 && (
+          <p className="text-xs leading-5 text-muted-foreground">
+            Особые дни:{' '}
+            {selectedClient.specialDays.map((specialDay, index) => (
+              <React.Fragment key={specialDay.weekday}>
+                {index > 0 && ', '}
+                <span
+                  className={cn(
+                    specialDay.weekday === workDateWeekday && 'font-semibold text-primary',
+                  )}
+                >
+                  {getWeekdayLabel(specialDay.weekday).toLowerCase()} —{' '}
+                  {formatMoney(specialDay.rate)}/ч
+                </span>
+              </React.Fragment>
+            ))}
+          </p>
         )}
       </div>
 
@@ -1093,6 +1117,12 @@ function WorkSessionFormFields({
   );
 }
 
+function getIsoWeekday(date: Date) {
+  const day = date.getDay();
+
+  return day === 0 ? 7 : day;
+}
+
 function getStartOfWeek(date: Date) {
   const day = date.getDay();
   const diff = day === 0 ? -6 : 1 - day;
@@ -1162,7 +1192,19 @@ function isManualHoliday(session: WorkSession) {
   return session.rateType === 'weekend' && !isWeekend(parseDate(session.workDate));
 }
 
+function getRateBadgeVariant(rateType: WorkSessionRateType) {
+  if (rateType === 'special') {
+    return 'default';
+  }
+
+  return rateType === 'weekend' ? 'warning' : 'secondary';
+}
+
 function getRateBadgeLabel(session: WorkSession) {
+  if (session.rateType === 'special') {
+    return 'особый день';
+  }
+
   if (isManualHoliday(session)) {
     return 'праздничный';
   }

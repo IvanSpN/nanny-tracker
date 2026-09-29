@@ -7,12 +7,18 @@ import { FindWorkSessionsQueryDto } from './dto/find-work-sessions-query.dto';
 import { UpdateWorkSessionStatusDto } from './dto/update-work-session-status.dto';
 import { WorkSession, WorkSessionRateType, WorkSessionStatus } from './models/work-sessions';
 import { Client } from '../clients/models/client.model';
+import { ClientSpecialDay } from '../clients/models/client-special-day.model';
 import { WorkersService } from '../workers/workers.service';
 import { Worker } from '../workers/models/worker.model';
 
 type WorkSessionClientResponse = {
   id: string;
   name: string;
+};
+
+type ResolvedRate = {
+  rateType: WorkSessionRateType;
+  rateValue: string;
 };
 
 type WorkSessionResponse = {
@@ -46,8 +52,7 @@ export class WorkSessionsService {
     const worker = await this.getWorkerByUserId(userId);
     const client = await this.findOwnedClient(worker.id, dto.clientId);
     const workedMinutes = this.calculateWorkedMinutes(dto.startTime, dto.endTime);
-    const rateType = this.resolveRateType(dto.workDate, dto.rateType);
-    const rateValue = this.getRateValue(client, rateType);
+    const { rateType, rateValue } = this.resolveRate(client, dto.workDate, dto.rateType);
     const amount = this.calculateAmount(rateValue, workedMinutes);
 
     const workSession = await this.workSessionModel.create({
@@ -136,17 +141,22 @@ export class WorkSessionsService {
   ): Promise<WorkSessionResponse> {
     const worker = await this.getWorkerByUserId(userId);
     const workSession = await this.findOwnedSession(worker.id, id);
-    const client =
-      dto.clientId && dto.clientId !== workSession.clientId
-        ? await this.findOwnedClient(worker.id, dto.clientId)
-        : workSession.client;
+    const client = await this.findOwnedClient(worker.id, dto.clientId ?? workSession.clientId);
     const workDate = dto.workDate ?? workSession.workDate;
     const startTime = dto.startTime ?? workSession.startTime;
     const endTime = dto.endTime ?? workSession.endTime;
     const workedMinutes = this.calculateWorkedMinutes(startTime, endTime);
     const requestedRateType = dto.rateType ?? (dto.workDate ? undefined : workSession.rateType);
-    const rateType = this.resolveRateType(workDate, requestedRateType);
-    const rateValue = this.getRateValue(client, rateType);
+    // Ставка фиксируется в смене: цены клиента могли поменяться, а правка
+    // комментария или времени не должна переоценивать уже сохранённую смену.
+    const isRateChanged =
+      client.id !== workSession.clientId ||
+      workDate !== workSession.workDate ||
+      this.isManualHoliday(workDate, requestedRateType) !==
+        this.isManualHoliday(workSession.workDate, workSession.rateType);
+    const { rateType, rateValue } = isRateChanged
+      ? this.resolveRate(client, workDate, requestedRateType)
+      : { rateType: workSession.rateType, rateValue: workSession.rateValue };
     const amount = this.calculateAmount(rateValue, workedMinutes);
 
     await workSession.update({
@@ -212,6 +222,13 @@ export class WorkSessionsService {
         id,
         workerId,
       },
+      include: [
+        {
+          model: ClientSpecialDay,
+          as: 'specialDays',
+          attributes: ['weekday', 'rate'],
+        },
+      ],
     });
 
     if (!client) {
@@ -270,33 +287,45 @@ export class WorkSessionsService {
     return hours * 60 + minutes;
   }
 
-  private resolveRateType(
+  /**
+   * Приоритет: особый день клиента → выходной (сб/вс) или праздник → обычная ставка.
+   */
+  private resolveRate(
+    client: Client,
     workDate: string,
     requestedRateType?: WorkSessionRateType,
-  ): WorkSessionRateType {
-    if (this.isWeekendDate(workDate)) {
-      return WorkSessionRateType.WEEKEND;
+  ): ResolvedRate {
+    const weekday = this.getIsoWeekday(workDate);
+    const specialDay = client.specialDays?.find((item) => item.weekday === weekday);
+
+    if (specialDay) {
+      return {
+        rateType: WorkSessionRateType.SPECIAL,
+        rateValue: specialDay.rate,
+      };
     }
 
-    if (requestedRateType === WorkSessionRateType.WEEKEND) {
-      return WorkSessionRateType.WEEKEND;
+    if (weekday >= 6 || requestedRateType === WorkSessionRateType.WEEKEND) {
+      return {
+        rateType: WorkSessionRateType.WEEKEND,
+        rateValue: client.weekendRate ?? client.regularRate,
+      };
     }
 
-    return WorkSessionRateType.REGULAR;
+    return {
+      rateType: WorkSessionRateType.REGULAR,
+      rateValue: client.regularRate,
+    };
   }
 
-  private isWeekendDate(workDate: string): boolean {
+  private isManualHoliday(workDate: string, rateType?: WorkSessionRateType): boolean {
+    return rateType === WorkSessionRateType.WEEKEND && this.getIsoWeekday(workDate) < 6;
+  }
+
+  private getIsoWeekday(workDate: string): number {
     const day = new Date(`${workDate}T00:00:00.000Z`).getUTCDay();
 
-    return day === 0 || day === 6;
-  }
-
-  private getRateValue(client: Client, rateType: WorkSessionRateType): string {
-    if (rateType === WorkSessionRateType.WEEKEND) {
-      return client.weekendRate ?? client.regularRate;
-    }
-
-    return client.regularRate;
+    return day === 0 ? 7 : day;
   }
 
   private calculateAmount(rateValue: string, workedMinutes: number): string {

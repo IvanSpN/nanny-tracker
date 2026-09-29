@@ -19,7 +19,7 @@ type WorkSessionDto = {
   endTime: string;
   workedMinutes: number;
   hours: number;
-  rateType: 'regular' | 'weekend';
+  rateType: 'regular' | 'weekend' | 'special';
   rateValue: string;
   amount: string;
   comment: string | null;
@@ -109,7 +109,9 @@ function isWorkSessionDto(value: unknown): value is WorkSessionDto {
     typeof value.endTime === 'string' &&
     typeof value.workedMinutes === 'number' &&
     typeof value.hours === 'number' &&
-    (value.rateType === 'regular' || value.rateType === 'weekend') &&
+    (value.rateType === 'regular' ||
+      value.rateType === 'weekend' ||
+      value.rateType === 'special') &&
     typeof value.rateValue === 'string' &&
     typeof value.amount === 'string' &&
     (typeof value.comment === 'string' || value.comment === null) &&

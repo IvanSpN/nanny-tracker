@@ -13,6 +13,7 @@ type WorkerClientDto = {
   name: string;
   regularRate: string;
   weekendRate: string | null;
+  specialDays?: { weekday: number; rate: string }[];
   phone: string | null;
   notes: string | null;
   isActive: boolean;
@@ -69,5 +70,9 @@ function mapClient(client: WorkerClientDto): WorkerClient {
     ...client,
     regularRate: Number(client.regularRate),
     weekendRate: client.weekendRate === null ? null : Number(client.weekendRate),
+    specialDays: (client.specialDays ?? []).map((specialDay) => ({
+      weekday: specialDay.weekday,
+      rate: Number(specialDay.rate),
+    })),
   };
 }

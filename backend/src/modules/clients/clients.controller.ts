@@ -58,6 +58,23 @@ const clientResponseSchema = {
       nullable: true,
       example: '2000.00',
     },
+    specialDays: {
+      type: 'array',
+      description: 'Особые дни недели со своей ставкой (1 — понедельник, 7 — воскресенье)',
+      items: {
+        type: 'object',
+        properties: {
+          weekday: {
+            type: 'integer',
+            example: 2,
+          },
+          rate: {
+            type: 'string',
+            example: '4000.00',
+          },
+        },
+      },
+    },
     phone: {
       type: 'string',
       nullable: true,
