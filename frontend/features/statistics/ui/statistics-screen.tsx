@@ -53,7 +53,7 @@ export function StatisticsScreen() {
         <StatMetric
           icon={Banknote}
           title="За неделю"
-          value={formatMoney(sum(weekSessions.map((session) => session.amount)))}
+          value={formatMoney(sum(weekSessions.map((session) => session.totalAmount)))}
         />
         <StatMetric
           icon={WalletCards}
@@ -63,7 +63,7 @@ export function StatisticsScreen() {
         <StatMetric
           icon={CalendarRange}
           title="За месяц"
-          value={formatMoney(sum(monthSessions.map((session) => session.amount)))}
+          value={formatMoney(sum(monthSessions.map((session) => session.totalAmount)))}
         />
       </div>
 
@@ -134,17 +134,21 @@ function Breakdown({
     .map((client) => {
       const clientSessions = sessions.filter((session) => session.clientId === client.id);
       const hours = sum(clientSessions.map((session) => session.hours));
-      const amount = sum(clientSessions.map((session) => session.amount));
+      const amount = sum(clientSessions.map((session) => session.totalAmount));
+      const salaryAmount = sum(clientSessions.map((session) => session.amount));
 
       return {
         client,
         hours,
         amount,
+        salaryAmount,
       };
     })
     .filter((row) => row.hours > 0);
   const totalHours = sum(rows.map((row) => row.hours));
   const totalAmount = sum(rows.map((row) => row.amount));
+  // Средняя ставка — только по оплате за часы, без расходов няни.
+  const totalSalaryAmount = sum(rows.map((row) => row.salaryAmount));
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
@@ -196,7 +200,7 @@ function Breakdown({
           <SummaryLine label="Начислено" value={formatMoney(totalAmount)} />
           <SummaryLine
             label="Средняя ставка"
-            value={formatMoney(totalHours > 0 ? totalAmount / totalHours : 0)}
+            value={formatMoney(totalHours > 0 ? totalSalaryAmount / totalHours : 0)}
           />
         </div>
       </section>

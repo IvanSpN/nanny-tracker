@@ -110,7 +110,38 @@ const workSessionResponseSchema = {
     amount: {
       type: 'string',
       example: '6750.00',
-      description: 'Расчётная сумма за смену',
+      description: 'Расчётная сумма за смену (часы × ставка), без расходов',
+    },
+    expenses: {
+      type: 'array',
+      description: 'Доп. расходы няни за смену',
+      items: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            format: 'uuid',
+          },
+          amount: {
+            type: 'string',
+            example: '300.00',
+          },
+          description: {
+            type: 'string',
+            example: 'Вода',
+          },
+        },
+      },
+    },
+    expensesAmount: {
+      type: 'string',
+      example: '300.00',
+      description: 'Сумма доп. расходов',
+    },
+    totalAmount: {
+      type: 'string',
+      example: '7050.00',
+      description: 'Итого к оплате за смену: amount + expensesAmount',
     },
     comment: {
       type: 'string',

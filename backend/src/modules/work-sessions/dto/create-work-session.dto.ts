@@ -1,5 +1,7 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -8,11 +10,14 @@ import {
   IsUUID,
   Matches,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WorkSessionRateType } from '../models/work-sessions';
 
 export const WORK_SESSION_COMMENT_MAX_LENGTH = 240;
+export const WORK_SESSION_EXPENSE_DESCRIPTION_MAX_LENGTH = 120;
+export const WORK_SESSION_EXPENSES_MAX_COUNT = 20;
 
 const trimString = ({ value }: { value: unknown }): unknown => {
   if (typeof value === 'string') {
@@ -21,6 +26,32 @@ const trimString = ({ value }: { value: unknown }): unknown => {
 
   return value;
 };
+
+export class WorkSessionExpenseDto {
+  @ApiProperty({
+    example: '300.00',
+    description: 'Сумма расхода',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'number' ? value.toString() : trimString({ value }),
+  )
+  @IsString()
+  @Matches(/^(?!0+(\.0{1,2})?$)\d+(\.\d{1,2})?$/, {
+    message: 'Сумма расхода должна быть больше нуля, не больше 2 знаков после точки',
+  })
+  amount!: string;
+
+  @ApiProperty({
+    example: 'Вода',
+    description: 'За что потрачено',
+    maxLength: WORK_SESSION_EXPENSE_DESCRIPTION_MAX_LENGTH,
+  })
+  @Transform(trimString)
+  @IsString()
+  @IsNotEmpty({ message: 'Укажите, за что расход' })
+  @MaxLength(WORK_SESSION_EXPENSE_DESCRIPTION_MAX_LENGTH)
+  description!: string;
+}
 
 export class CreateWorkSessionDto {
   @ApiProperty({
@@ -80,4 +111,16 @@ export class CreateWorkSessionDto {
   @IsString()
   @MaxLength(WORK_SESSION_COMMENT_MAX_LENGTH)
   comment?: string | null;
+
+  @ApiPropertyOptional({
+    type: [WorkSessionExpenseDto],
+    description:
+      'Доп. расходы няни за смену (вода, площадка и т.п.). Прибавляются к сумме смены. Передаётся полным списком.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(WORK_SESSION_EXPENSES_MAX_COUNT)
+  @ValidateNested({ each: true })
+  @Type(() => WorkSessionExpenseDto)
+  expenses?: WorkSessionExpenseDto[];
 }

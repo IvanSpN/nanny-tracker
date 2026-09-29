@@ -22,6 +22,13 @@ type WorkSessionDto = {
   rateType: 'regular' | 'weekend' | 'special';
   rateValue: string;
   amount: string;
+  expenses: {
+    id: string;
+    amount: string;
+    description: string;
+  }[];
+  expensesAmount: string;
+  totalAmount: string;
   comment: string | null;
   status: 'pending' | 'confirmed' | 'rejected';
   confirmedAt: string | null;
@@ -82,6 +89,12 @@ function mapWorkSession(workSession: WorkSessionDto): WorkSession {
     ...workSession,
     rateValue: Number(workSession.rateValue),
     amount: Number(workSession.amount),
+    expenses: workSession.expenses.map((expense) => ({
+      ...expense,
+      amount: Number(expense.amount),
+    })),
+    expensesAmount: Number(workSession.expensesAmount),
+    totalAmount: Number(workSession.totalAmount),
   };
 }
 
@@ -114,6 +127,9 @@ function isWorkSessionDto(value: unknown): value is WorkSessionDto {
       value.rateType === 'special') &&
     typeof value.rateValue === 'string' &&
     typeof value.amount === 'string' &&
+    Array.isArray(value.expenses) &&
+    typeof value.expensesAmount === 'string' &&
+    typeof value.totalAmount === 'string' &&
     (typeof value.comment === 'string' || value.comment === null) &&
     (value.status === 'pending' || value.status === 'confirmed' || value.status === 'rejected') &&
     (typeof value.confirmedAt === 'string' || value.confirmedAt === null)

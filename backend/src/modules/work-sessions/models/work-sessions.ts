@@ -7,6 +7,7 @@ import {
   Default,
   DeletedAt,
   ForeignKey,
+  HasMany,
   Model,
   PrimaryKey,
   Table,
@@ -14,6 +15,7 @@ import {
 } from 'sequelize-typescript';
 import { Client } from '../../clients/models/client.model';
 import { Worker } from '../../workers/models/worker.model';
+import { WorkSessionExpense } from './work-session-expense.model';
 
 export enum WorkSessionRateType {
   REGULAR = 'regular',
@@ -122,6 +124,12 @@ export class WorkSession extends Model {
     type: DataType.TEXT,
   })
   declare comment: string | null;
+
+  @HasMany(() => WorkSessionExpense, {
+    foreignKey: 'workSessionId',
+    as: 'expenses',
+  })
+  declare expenses: WorkSessionExpense[];
 
   @AllowNull(false)
   @Default(WorkSessionStatus.PENDING)

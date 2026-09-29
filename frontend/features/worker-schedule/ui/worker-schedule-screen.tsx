@@ -14,8 +14,9 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  Wallet,
 } from 'lucide-react';
-import { Controller, useForm, useWatch, type UseFormReturn } from 'react-hook-form';
+import { Controller, useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,7 @@ import {
   useUpdateWorkSessionStatusMutation,
 } from '@/entities/work-session/api/work-session.mutations';
 import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
+import { formatExpenses } from '@/entities/work-session/lib/format-expenses';
 import type {
   WorkSession,
   WorkSessionRateType,
@@ -71,6 +73,8 @@ import { formatHours, formatMoney } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
 
 const WORK_SESSION_COMMENT_MAX_LENGTH = 240;
+const WORK_SESSION_EXPENSE_DESCRIPTION_MAX_LENGTH = 120;
+const WORK_SESSION_EXPENSES_MAX_COUNT = 20;
 
 const workSessionFormSchema = z.object({
   clientId: z.string().min(1, 'Выберите клиента'),
@@ -89,9 +93,26 @@ const workSessionCommentSchema = z.object({
   comment: z.string().max(WORK_SESSION_COMMENT_MAX_LENGTH, 'Комментарий до 240 символов'),
 });
 
+const workSessionExpensesSchema = z.object({
+  expenses: z
+    .array(
+      z.object({
+        amount: z.coerce.number().positive('Укажите сумму'),
+        description: z
+          .string()
+          .trim()
+          .min(1, 'Укажите, за что')
+          .max(WORK_SESSION_EXPENSE_DESCRIPTION_MAX_LENGTH, 'До 120 символов'),
+      }),
+    )
+    .max(WORK_SESSION_EXPENSES_MAX_COUNT),
+});
+
 type WorkSessionFormInput = z.input<typeof workSessionFormSchema>;
 type WorkSessionFormValues = z.output<typeof workSessionFormSchema>;
 type WorkSessionCommentValues = z.infer<typeof workSessionCommentSchema>;
+type WorkSessionExpensesInput = z.input<typeof workSessionExpensesSchema>;
+type WorkSessionExpensesValues = z.output<typeof workSessionExpensesSchema>;
 type ClientSummary = {
   id: string;
   name: string;
@@ -121,7 +142,7 @@ export function WorkerScheduleScreen() {
   const weekSessions = workSessions.filter((session) => weekKeys.has(session.workDate));
   const confirmedSessions = weekSessions.filter((session) => session.status === 'confirmed');
   const weekTotalHours = sum(confirmedSessions.map((session) => session.hours));
-  const weekTotalMoney = sum(confirmedSessions.map((session) => session.amount));
+  const weekTotalMoney = sum(confirmedSessions.map((session) => session.totalAmount));
   const activeClientsCount = new Set(weekSessions.map((session) => session.clientId)).size;
   const clientMap = new Map(clients.map((client) => [client.id, client]));
   const groupedByClient = groupByClient(confirmedSessions, clients);
@@ -315,7 +336,9 @@ export function WorkerScheduleScreen() {
               (session) => session.status === 'confirmed',
             );
             const confirmedDayHours = sum(confirmedDaySessions.map((session) => session.hours));
-            const confirmedDayMoney = sum(confirmedDaySessions.map((session) => session.amount));
+            const confirmedDayMoney = sum(
+              confirmedDaySessions.map((session) => session.totalAmount),
+            );
 
             return (
               <section
@@ -515,6 +538,11 @@ function WorkSessionRow({
         <p className="mt-1 text-sm text-muted-foreground">
           с {session.startTime} до {session.endTime} · {formatHours(session.hours)}
         </p>
+        {session.expenses.length > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Расходы: {formatExpenses(session.expenses)}
+          </p>
+        )}
         {session.comment && (
           <p className="mt-2 line-clamp-3 rounded-md bg-muted/70 px-2 py-1.5 text-xs text-muted-foreground">
             {session.comment}
@@ -522,8 +550,9 @@ function WorkSessionRow({
         )}
       </div>
       <div className="flex flex-col items-end justify-between gap-2">
-        <p className="text-sm font-semibold">{formatMoney(session.amount)}</p>
+        <p className="text-sm font-semibold">{formatMoney(session.totalAmount)}</p>
         <div className="flex items-center gap-1">
+          <WorkSessionExpensesDialog session={session} />
           <WorkSessionCommentDialog session={session} />
           <EditWorkSessionDialog session={session} clients={clients} />
           <DeleteWorkSessionDialog
@@ -543,6 +572,168 @@ function WorkSessionRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+function WorkSessionExpensesDialog({ session }: { session: WorkSession }) {
+  const [open, setOpen] = React.useState(false);
+  const updateWorkSessionMutation = useUpdateWorkSessionMutation();
+  const getDefaults = React.useCallback(
+    (): WorkSessionExpensesInput => ({
+      expenses:
+        session.expenses.length > 0
+          ? session.expenses.map((expense) => ({
+              amount: expense.amount,
+              description: expense.description,
+            }))
+          : [{ amount: '', description: '' }],
+    }),
+    [session.expenses],
+  );
+  const form = useForm<WorkSessionExpensesInput, unknown, WorkSessionExpensesValues>({
+    resolver: zodResolver(workSessionExpensesSchema),
+    defaultValues: getDefaults(),
+  });
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: 'expenses',
+  });
+  const expenses = useWatch({ control: form.control, name: 'expenses' }) ?? [];
+  const expensesTotal = sum(
+    expenses.map((expense) => {
+      const amount = Number(expense.amount);
+
+      return Number.isFinite(amount) && amount > 0 ? amount : 0;
+    }),
+  );
+  const errors = form.formState.errors.expenses;
+  const isPending = updateWorkSessionMutation.isPending;
+
+  React.useEffect(() => {
+    if (open) {
+      form.reset(getDefaults());
+    }
+  }, [form, getDefaults, open]);
+
+  const save = async (values: WorkSessionExpensesValues) => {
+    try {
+      await updateWorkSessionMutation.mutateAsync({
+        id: session.id,
+        payload: {
+          expenses: values.expenses.map((expense) => ({
+            amount: expense.amount.toFixed(2),
+            description: expense.description,
+          })),
+        },
+      });
+
+      setOpen(false);
+    } catch {
+      // Error is rendered from mutation state.
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          updateWorkSessionMutation.reset();
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          size="icon"
+          variant={session.expenses.length > 0 ? 'soft' : 'ghost'}
+          title={session.expenses.length > 0 ? 'Изменить доп. расходы' : 'Добавить доп. расходы'}
+        >
+          <Wallet />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+        <DialogHeader>
+          <DialogTitle>Доп. расходы</DialogTitle>
+          <DialogDescription>
+            Траты за свой счёт: вода, развивашки, площадка. Прибавятся к сумме смены.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form className="space-y-4" onSubmit={form.handleSubmit(save)}>
+          <div className="space-y-2">
+            {fields.length === 0 && (
+              <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-sm text-muted-foreground">
+                Расходов нет
+              </p>
+            )}
+            {fields.map((field, index) => (
+              <div key={field.id} className="space-y-1">
+                <div className="grid grid-cols-[6.5rem_1fr_auto] gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="Сумма"
+                    aria-label="Сумма"
+                    {...form.register(`expenses.${index}.amount`)}
+                  />
+                  <Input
+                    placeholder="За что"
+                    aria-label="За что"
+                    maxLength={WORK_SESSION_EXPENSE_DESCRIPTION_MAX_LENGTH}
+                    {...form.register(`expenses.${index}.description`)}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    title="Удалить трату"
+                    onClick={() => remove(index)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+                {(errors?.[index]?.amount || errors?.[index]?.description) && (
+                  <p className="text-xs text-destructive">
+                    {errors[index]?.amount?.message ?? errors[index]?.description?.message}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={fields.length >= WORK_SESSION_EXPENSES_MAX_COUNT}
+              onClick={() => append({ amount: '', description: '' })}
+            >
+              <Plus />
+              Добавить трату
+            </Button>
+            <p className="text-sm">
+              Итого: <span className="font-semibold">{formatMoney(expensesTotal)}</span>
+            </p>
+          </div>
+
+          {updateWorkSessionMutation.error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {getApiErrorMessage(updateWorkSessionMutation.error)}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? 'Сохраняем...' : 'Сохранить'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1260,7 +1451,7 @@ function groupByClient(sessions: WorkSession[], clients: WorkerClient[]) {
     };
 
     current.hours += session.hours;
-    current.amount += session.amount;
+    current.amount += session.totalAmount;
     groups.set(session.clientId, current);
   }
 

@@ -16,6 +16,7 @@ import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.q
 import type { WorkSession } from '@/entities/work-session/model/types';
 import { getApiErrorMessage } from '@/shared/api/http-client';
 import { addDays, formatDay, parseDate, toDateKey } from '@/shared/lib/date';
+import { formatExpenses } from '@/entities/work-session/lib/format-expenses';
 import { formatHours, formatMoney } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
 import { useNavigationStore, type ClientTab } from '@/shared/store/use-navigation-store';
@@ -146,7 +147,7 @@ function ClientOverview({ sessions }: { sessions: WorkSession[] }) {
   const monthKey = toDateKey(new Date()).slice(0, 7);
   const monthSessions = sessions.filter((session) => session.workDate.startsWith(monthKey));
   const hours = sum(monthSessions.map((session) => session.hours));
-  const amount = sum(monthSessions.map((session) => session.amount));
+  const amount = sum(monthSessions.map((session) => session.totalAmount));
 
   return (
     <div className="space-y-4">
@@ -279,8 +280,13 @@ function SessionHistoryRow({ session }: { session: WorkSession }) {
           <p className="text-sm font-medium">{formatDay(parseDate(session.workDate))}</p>
           <p className="text-xs text-muted-foreground">{formatHours(session.hours)}</p>
         </div>
-        <p className="shrink-0 font-semibold">{formatMoney(session.amount)}</p>
+        <p className="shrink-0 font-semibold">{formatMoney(session.totalAmount)}</p>
       </div>
+      {session.expenses.length > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Расходы: {formatExpenses(session.expenses)}
+        </p>
+      )}
       {session.comment && (
         <div className="mt-2 border-t border-border/60 pt-2">
           <p className="line-clamp-3 text-xs text-muted-foreground">{session.comment}</p>
