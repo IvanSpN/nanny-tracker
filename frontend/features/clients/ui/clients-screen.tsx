@@ -32,7 +32,11 @@ import {
   useUpdateClientMutation,
 } from '@/entities/client/api/client.mutations';
 import { useClientsQuery } from '@/entities/client/api/client.queries';
-import type { ClientCredentials, WorkerClient } from '@/entities/client/model/types';
+import type {
+  ClientCredentials,
+  ClientSpecialDay,
+  WorkerClient,
+} from '@/entities/client/model/types';
 import {
   createClientSchema,
   specialDaySchema,
@@ -239,21 +243,25 @@ function ClientDetails({ client }: { client: WorkerClient }) {
             <CalendarDays className="size-4 text-primary" />
             <h3 className="font-semibold">Особые дни</h3>
           </div>
-          <AddSpecialDayDialog client={client} />
+          <SpecialDayDialog client={client} />
         </div>
         {client.specialDays.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Не заданы. Ставка считается по будням и выходным.
           </p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="divide-y divide-border">
             {client.specialDays.map((specialDay) => (
               <li
                 key={specialDay.weekday}
-                className="flex items-center justify-between gap-3 text-sm"
+                className="flex items-center gap-2 py-2 text-sm first:pt-0 last:pb-0"
               >
-                <span className="font-medium">{getWeekdayLabel(specialDay.weekday)}</span>
-                <span>{formatMoney(specialDay.rate)} за 1 час</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{getWeekdayLabel(specialDay.weekday)}</p>
+                  <p className="text-muted-foreground">{formatMoney(specialDay.rate)} за 1 час</p>
+                </div>
+                <SpecialDayDialog client={client} specialDay={specialDay} />
+                <DeleteSpecialDayDialog client={client} specialDay={specialDay} />
               </li>
             ))}
           </ul>
@@ -515,14 +523,25 @@ function EditClientDialog({ client }: { client: WorkerClient }) {
   );
 }
 
-function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
+/** Без specialDay — добавление нового дня, со specialDay — изменение этого дня. */
+function SpecialDayDialog({
+  client,
+  specialDay,
+}: {
+  client: WorkerClient;
+  specialDay?: ClientSpecialDay;
+}) {
   const [open, setOpen] = React.useState(false);
   const updateClientMutation = useUpdateClientMutation();
-  const usedWeekdays = new Set(client.specialDays.map((specialDay) => specialDay.weekday));
+  const isEdit = specialDay !== undefined;
+  const otherSpecialDays = client.specialDays.filter(
+    (item) => item.weekday !== specialDay?.weekday,
+  );
+  const usedWeekdays = new Set(otherSpecialDays.map((item) => item.weekday));
   const freeWeekdays = WEEKDAY_OPTIONS.filter((option) => !usedWeekdays.has(option.value));
   const getDefaults = (): SpecialDayFormInput => ({
-    weekday: freeWeekdays[0]?.value ?? 1,
-    rate: client.regularRate,
+    weekday: specialDay?.weekday ?? freeWeekdays[0]?.value ?? 1,
+    rate: specialDay?.rate ?? client.regularRate,
   });
   const form = useForm<SpecialDayFormInput, unknown, SpecialDayFormValues>({
     resolver: zodResolver(specialDaySchema),
@@ -541,7 +560,7 @@ function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
       await updateClientMutation.mutateAsync({
         clientId: client.id,
         payload: {
-          specialDays: toSpecialDaysPayload([...client.specialDays, values]),
+          specialDays: toSpecialDaysPayload([...otherSpecialDays, values]),
         },
       });
       setOpen(false);
@@ -549,6 +568,8 @@ function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
       // Error is rendered from mutation state.
     }
   };
+
+  const rateInputId = `special-day-rate-${specialDay?.weekday ?? 'new'}`;
 
   return (
     <Dialog
@@ -561,19 +582,30 @@ function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={freeWeekdays.length === 0}
-          title={freeWeekdays.length === 0 ? 'Все дни недели уже заданы' : undefined}
-        >
-          <Plus />
-          Добавить
-        </Button>
+        {isEdit ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-11"
+            title={`Изменить: ${getWeekdayLabel(specialDay.weekday)}`}
+          >
+            <Pencil />
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={freeWeekdays.length === 0}
+            title={freeWeekdays.length === 0 ? 'Все дни недели уже заданы' : undefined}
+          >
+            <Plus />
+            Добавить
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Особый день</DialogTitle>
+          <DialogTitle>{isEdit ? 'Изменить особый день' : 'Особый день'}</DialogTitle>
           <DialogDescription>
             Цена за час в этот день недели будет важнее ставок будней, выходных и праздников.
             Применяется к следующим сменам.
@@ -607,8 +639,13 @@ function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="quick-special-day-rate">Цена за час</Label>
-              <Input id="quick-special-day-rate" type="number" {...form.register('rate')} />
+              <Label htmlFor={rateInputId}>Цена за час</Label>
+              <Input
+                id={rateInputId}
+                type="number"
+                inputMode="decimal"
+                {...form.register('rate')}
+              />
               {form.formState.errors.rate && (
                 <p className="text-xs text-destructive">{form.formState.errors.rate.message}</p>
               )}
@@ -623,10 +660,97 @@ function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
 
           <DialogFooter>
             <Button type="submit" disabled={updateClientMutation.isPending}>
-              {updateClientMutation.isPending ? 'Сохраняем...' : 'Добавить'}
+              {updateClientMutation.isPending ? 'Сохраняем...' : isEdit ? 'Сохранить' : 'Добавить'}
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteSpecialDayDialog({
+  client,
+  specialDay,
+}: {
+  client: WorkerClient;
+  specialDay: ClientSpecialDay;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const updateClientMutation = useUpdateClientMutation();
+  const weekdayLabel = getWeekdayLabel(specialDay.weekday);
+  const isPending = updateClientMutation.isPending;
+
+  const deleteSpecialDay = async () => {
+    try {
+      await updateClientMutation.mutateAsync({
+        clientId: client.id,
+        payload: {
+          specialDays: toSpecialDaysPayload(
+            client.specialDays.filter((item) => item.weekday !== specialDay.weekday),
+          ),
+        },
+      });
+      setOpen(false);
+    } catch {
+      // Error is rendered from mutation state.
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          updateClientMutation.reset();
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-11"
+          title={`Удалить: ${weekdayLabel}`}
+          disabled={isPending}
+        >
+          <Trash2 />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Удалить особый день?</DialogTitle>
+          <DialogDescription>
+            {weekdayLabel}, {formatMoney(specialDay.rate)} за 1 час. Новые смены в этот день пойдут
+            по ставке будней или выходных, прошлые не изменятся.
+          </DialogDescription>
+        </DialogHeader>
+
+        {updateClientMutation.error && (
+          <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {getApiErrorMessage(updateClientMutation.error)}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isPending}
+            onClick={() => setOpen(false)}
+          >
+            Отмена
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={isPending}
+            onClick={() => void deleteSpecialDay()}
+          >
+            {isPending ? 'Удаляем...' : 'Удалить'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
