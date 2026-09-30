@@ -27,6 +27,7 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+.claude/plans/
 
 # Coverage / tests
 coverage/

@@ -34,6 +34,68 @@ function DialogOverlay({
   );
 }
 
+let openDialogsCount = 0;
+
+// iOS Safari при открытой клавиатуре уменьшает только видимую область (visual viewport),
+// а окно с `fixed bottom-0` остаётся привязано к низу страницы — под клавиатурой.
+// Пока окно открыто, отдаём в CSS размеры видимой области и высоту клавиатуры.
+function DialogViewportSync() {
+  React.useEffect(() => {
+    const viewport = window.visualViewport;
+    const root = document.documentElement;
+    let frame = 0;
+    let lastHeight = 0;
+
+    const sync = () => {
+      if (!viewport) return;
+
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        // При увеличении двумя пальцами видимая область тоже меньше, но это не клавиатура.
+        const isZoomed = viewport.scale > 1.01;
+        const height = isZoomed ? window.innerHeight : viewport.height;
+        const top = isZoomed ? 0 : viewport.offsetTop;
+        const keyboardInset = Math.max(0, window.innerHeight - height - top);
+
+        root.style.setProperty('--visual-viewport-height', `${height}px`);
+        root.style.setProperty('--visual-viewport-top', `${top}px`);
+        root.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
+
+        // Окно стало ниже — возвращаем в видимую часть поле, в котором стоит курсор.
+        const active = document.activeElement;
+        if (
+          height !== lastHeight &&
+          active instanceof HTMLElement &&
+          active.closest('[data-slot="dialog-content"]')
+        ) {
+          active.scrollIntoView({ block: 'nearest' });
+        }
+        lastHeight = height;
+      });
+    };
+
+    openDialogsCount += 1;
+    sync();
+    viewport?.addEventListener('resize', sync);
+    viewport?.addEventListener('scroll', sync);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport?.removeEventListener('resize', sync);
+      viewport?.removeEventListener('scroll', sync);
+      openDialogsCount -= 1;
+
+      if (openDialogsCount === 0) {
+        root.style.removeProperty('--visual-viewport-height');
+        root.style.removeProperty('--visual-viewport-top');
+        root.style.removeProperty('--keyboard-inset');
+      }
+    };
+  }, []);
+
+  return null;
+}
+
 function DialogContent({
   className,
   children,
@@ -48,11 +110,15 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border border-border bg-background p-5 shadow-lg outline-none will-change-[filter,opacity,scale,translate]',
+          // Телефон: шторка снизу над клавиатурой, не выше видимой области, лишнее прокручивается.
+          'fixed bottom-[var(--keyboard-inset,0px)] left-1/2 z-50 grid max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] w-full -translate-x-1/2 gap-4 overflow-y-auto overscroll-contain rounded-t-lg border border-border bg-background p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-lg outline-none will-change-[filter,opacity,scale,translate]',
+          // Планшет и десктоп: окно по центру видимой области.
+          'sm:bottom-auto sm:top-[calc(var(--visual-viewport-top,0px)+var(--visual-viewport-height,100dvh)/2)] sm:max-h-[calc(var(--visual-viewport-height,100dvh)-2rem)] sm:w-[calc(100%-2rem)] sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg sm:pb-5',
           className,
         )}
         {...props}
       >
+        <DialogViewportSync />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">

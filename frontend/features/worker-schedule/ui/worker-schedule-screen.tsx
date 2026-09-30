@@ -667,7 +667,7 @@ function WorkSessionExpensesDialog({ session }: { session: WorkSession }) {
           <Wallet />
         </Button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Доп. расходы</DialogTitle>
           <DialogDescription>
@@ -828,7 +828,7 @@ function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
           <MessageSquareText />
         </Button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Комментарий к смене</DialogTitle>
           <DialogDescription>
@@ -911,7 +911,7 @@ function DeleteWorkSessionDialog({
           <Trash2 />
         </Button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Удалить смену?</DialogTitle>
           <DialogDescription>
@@ -1009,10 +1009,7 @@ function AddWorkSessionDialog({
         }
       }}
     >
-      <DialogContent
-        aria-describedby={undefined}
-        className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg"
-      >
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Новая смена</DialogTitle>
         </DialogHeader>
@@ -1092,7 +1089,7 @@ function EditWorkSessionDialog({
           <Pencil />
         </Button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Изменить смену</DialogTitle>
           <DialogDescription>Сумма будет пересчитана после сохранения.</DialogDescription>
@@ -1199,7 +1196,7 @@ function WorkSessionFormFields({
         <div className="min-w-0 space-y-2">
           <Label htmlFor="shift-date">Дата</Label>
           <Input
-            className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+            className="min-w-0 px-2 sm:px-3"
             id="shift-date"
             type="date"
             {...form.register('workDate')}
@@ -1216,7 +1213,7 @@ function WorkSessionFormFields({
             min="0.25"
             max="24"
             step="0.25"
-            className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+            className="min-w-0 px-2 sm:px-3"
             {...hoursField}
             onChange={(event) => {
               hoursField.onChange(event);
@@ -1239,7 +1236,7 @@ function WorkSessionFormFields({
             <Input
               id="shift-start-time"
               type="time"
-              className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+              className="min-w-0 px-2 sm:px-3"
               {...startTimeField}
               onChange={(event) => {
                 startTimeField.onChange(event);
@@ -1257,7 +1254,7 @@ function WorkSessionFormFields({
             <Input
               id="shift-end-time"
               type="time"
-              className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm"
+              className="min-w-0 px-2 sm:px-3"
               {...endTimeField}
               onChange={(event) => {
                 endTimeField.onChange(event);

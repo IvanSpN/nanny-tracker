@@ -358,7 +358,7 @@ function AddClientDialog({ onCreated }: { onCreated: (client: WorkerClient) => v
           Добавить
         </Button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Новый клиент</DialogTitle>
           <DialogDescription>После создания будет показан временный доступ.</DialogDescription>
@@ -465,7 +465,7 @@ function EditClientDialog({ client }: { client: WorkerClient }) {
           Изменить
         </Button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Изменить клиента</DialogTitle>
           <DialogDescription>Новые ставки будут применяться к следующим сменам.</DialogDescription>
@@ -571,7 +571,7 @@ function AddSpecialDayDialog({ client }: { client: WorkerClient }) {
           Добавить
         </Button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-y-1/2 sm:rounded-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Особый день</DialogTitle>
           <DialogDescription>
