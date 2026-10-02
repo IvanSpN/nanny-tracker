@@ -3,6 +3,7 @@
 import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -114,6 +115,8 @@ function DialogContent({
           'fixed bottom-[var(--keyboard-inset,0px)] left-1/2 z-50 grid max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] w-full -translate-x-1/2 gap-4 overflow-y-auto overscroll-contain rounded-t-lg border border-border bg-background p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-lg outline-none will-change-[filter,opacity,scale,translate]',
           // Планшет и десктоп: окно по центру видимой области.
           'sm:bottom-auto sm:top-[calc(var(--visual-viewport-top,0px)+var(--visual-viewport-height,100dvh)/2)] sm:max-h-[calc(var(--visual-viewport-height,100dvh)-2rem)] sm:w-[calc(100%-2rem)] sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg sm:pb-5',
+          // Заголовок не заезжает под крестик.
+          showCloseButton && '[&_[data-slot=dialog-header]]:pr-12',
           className,
         )}
         {...props}
@@ -121,9 +124,16 @@ function DialogContent({
         <DialogViewportSync />
         {children}
         {showCloseButton && (
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-            <X className="size-4" />
-            <span className="sr-only">Закрыть</span>
+          // 44×44 с рамкой — чтобы попадать пальцем на телефоне.
+          <DialogPrimitive.Close asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute right-3 top-3 size-11 [&_svg]:size-5"
+            >
+              <X />
+              <span className="sr-only">Закрыть</span>
+            </Button>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
@@ -132,7 +142,13 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col gap-1.5 text-left', className)} {...props} />;
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cn('flex flex-col gap-1.5 text-left', className)}
+      {...props}
+    />
+  );
 }
 
 function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
