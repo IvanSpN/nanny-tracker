@@ -583,7 +583,7 @@ function WorkSessionRow({
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <p className="min-w-0 text-lg leading-tight font-bold break-words">{clientName}</p>
+          <p className="min-w-0 text-xl leading-tight font-bold break-words">{clientName}</p>
           {rateBadge && <Badge variant={rateBadge.variant}>{rateBadge.label}</Badge>}
           {statusBadge && <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>}
         </div>
@@ -633,7 +633,7 @@ function WorkSessionRowSkeleton() {
   return (
     <div className="grid grid-cols-[1fr_auto] gap-3 rounded-md border border-border bg-background/60 p-3">
       <div className="min-w-0 space-y-2">
-        <Skeleton className="h-6 w-36 max-w-full" />
+        <Skeleton className="h-7 w-36 max-w-full" />
         <Skeleton className="h-4 w-32 max-w-full" />
       </div>
       <div className="flex flex-col items-end gap-2">
