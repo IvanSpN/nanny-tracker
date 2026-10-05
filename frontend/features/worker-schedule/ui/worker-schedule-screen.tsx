@@ -3,8 +3,6 @@
 import * as React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  CalendarPlus,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -39,11 +37,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingStatus } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { useClientsQuery } from '@/entities/client/api/client.queries';
 import type { WorkerClient } from '@/entities/client/model/types';
 import {
   useCreateWorkSessionMutation,
+  useCreateWorkSessionsMutation,
   useDeleteWorkSessionMutation,
   useUpdateWorkSessionMutation,
   useUpdateWorkSessionStatusMutation,
@@ -123,7 +124,6 @@ export function WorkerScheduleScreen() {
   const clients = Array.isArray(clientsQuery.data) ? clientsQuery.data : [];
   const activeClients = clients.filter((client) => client.isActive);
   const [weekOffset, setWeekOffset] = React.useState(0);
-  const [copyError, setCopyError] = React.useState<string | null>(null);
   const [noClientsMessage, setNoClientsMessage] = React.useState<string | null>(null);
   const [addSessionDate, setAddSessionDate] = React.useState<string | null>(null);
   const touchStart = React.useRef<{ x: number; y: number } | null>(null);
@@ -136,20 +136,25 @@ export function WorkerScheduleScreen() {
   const workSessionsQuery = useWorkSessionsQuery({ dateFrom, dateTo });
   const updateStatusMutation = useUpdateWorkSessionStatusMutation();
   const deleteWorkSessionMutation = useDeleteWorkSessionMutation();
-  const copyWorkSessionMutation = useCreateWorkSessionMutation();
+  const copyWeekMutation = useCreateWorkSessionsMutation();
   const weekKeys = new Set(weekDays.map(toDateKey));
   const workSessions = Array.isArray(workSessionsQuery.data) ? workSessionsQuery.data : [];
   const weekSessions = workSessions.filter((session) => weekKeys.has(session.workDate));
   const confirmedSessions = weekSessions.filter((session) => session.status === 'confirmed');
+  const plannedSessions = weekSessions.filter((session) => session.status === 'pending');
   const weekTotalHours = sum(confirmedSessions.map((session) => session.hours));
   const weekTotalMoney = sum(confirmedSessions.map((session) => session.totalAmount));
-  const activeClientsCount = new Set(weekSessions.map((session) => session.clientId)).size;
+  // Прогноз недели: уже отработанное плюс планируемый доход всех дней.
+  const weekExpectedMoney =
+    weekTotalMoney + sum(plannedSessions.map((session) => session.totalAmount));
   const clientMap = new Map(clients.map((client) => [client.id, client]));
   const groupedByClient = groupByClient(confirmedSessions, clients);
-  const isScheduleLoading = workSessionsQuery.isLoading || clientsQuery.isLoading;
-  const isAddSessionDisabled = clientsQuery.isLoading;
+  // Смены несут имя клиента сами, поэтому неделю рисуем, не дожидаясь списка клиентов.
+  // isPending, а не isLoading: без сети запрос на паузе, и isLoading показал бы «Свободный день».
+  const isScheduleLoading = workSessionsQuery.isPending;
+  const isAddSessionDisabled = clientsQuery.isPending;
   const mutationError =
-    updateStatusMutation.error ?? deleteWorkSessionMutation.error ?? copyWorkSessionMutation.error;
+    updateStatusMutation.error ?? deleteWorkSessionMutation.error ?? copyWeekMutation.error;
 
   const openAddSessionDialog = (dateKey: string) => {
     if (activeClients.length === 0) {
@@ -170,30 +175,26 @@ export function WorkerScheduleScreen() {
     });
   };
 
-  const copyWeekToNext = async () => {
-    setCopyError(null);
-
-    try {
-      for (const session of weekSessions) {
-        await copyWorkSessionMutation.mutateAsync({
-          clientId: session.clientId,
-          workDate: toDateKey(addDays(parseDate(session.workDate), 7)),
-          startTime: session.startTime,
-          endTime: session.endTime,
-          rateType: isManualHoliday(session) ? 'weekend' : undefined,
-          comment: session.comment,
-        });
-      }
-
-      setWeekOffset((current) => current + 1);
-    } catch (error) {
-      setCopyError(getApiErrorMessage(error));
-    }
+  const copyWeekToNext = () => {
+    copyWeekMutation.mutate(
+      weekSessions.map((session) => ({
+        clientId: session.clientId,
+        workDate: toDateKey(addDays(parseDate(session.workDate), 7)),
+        startTime: session.startTime,
+        endTime: session.endTime,
+        rateType: isManualHoliday(session) ? 'weekend' : undefined,
+        comment: session.comment,
+      })),
+      {
+        onSuccess: () => setWeekOffset((current) => current + 1),
+      },
+    );
   };
 
   return (
     <section
       className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6"
+      aria-busy={isScheduleLoading}
       onTouchStart={(event) => {
         const touch = event.touches[0];
         touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
@@ -215,22 +216,14 @@ export function WorkerScheduleScreen() {
         }
       }}
     >
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">Расписание</p>
-          <h1 className="text-2xl font-semibold tracking-normal">
-            {formatDayRange(weekDays[0], weekDays[6])}
-          </h1>
-        </div>
-        <Button
-          size="icon"
-          disabled={isAddSessionDisabled}
-          title="Добавить смену"
-          onClick={() => openAddSessionDialog(dateFrom)}
-        >
-          <CalendarPlus />
-        </Button>
+      <div className="mb-4">
+        <p className="text-sm font-medium text-muted-foreground">Расписание</p>
+        <h1 className="text-2xl font-semibold tracking-normal">
+          {formatDayRange(weekDays[0], weekDays[6])}
+        </h1>
       </div>
+
+      <LoadingStatus active={isScheduleLoading} label="Загружаем смены…" />
 
       <AddWorkSessionDialog
         open={addSessionDate !== null}
@@ -243,16 +236,11 @@ export function WorkerScheduleScreen() {
         }}
       />
 
-      {(clientsQuery.isError ||
-        workSessionsQuery.isError ||
-        mutationError ||
-        copyError ||
-        noClientsMessage) && (
+      {(clientsQuery.isError || workSessionsQuery.isError || mutationError || noClientsMessage) && (
         <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {clientsQuery.isError && <p>{getApiErrorMessage(clientsQuery.error)}</p>}
           {workSessionsQuery.isError && <p>{getApiErrorMessage(workSessionsQuery.error)}</p>}
           {mutationError && <p>{getApiErrorMessage(mutationError)}</p>}
-          {copyError && <p>{copyError}</p>}
           {noClientsMessage && <p>{noClientsMessage}</p>}
         </div>
       )}
@@ -305,21 +293,39 @@ export function WorkerScheduleScreen() {
         </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        <Metric title="Часы" value={formatHours(weekTotalHours)} icon={Clock3} />
-        <Metric title="Доход" value={formatMoney(weekTotalMoney)} icon={Sparkles} />
-        <Metric title="Клиенты" value={String(activeClientsCount)} icon={CheckCircle2} />
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <Metric
+          title="Часы"
+          value={formatHours(weekTotalHours)}
+          icon={Clock3}
+          isLoading={isScheduleLoading}
+        />
+        <Metric
+          title="Доход"
+          value={formatMoney(weekTotalMoney)}
+          icon={Sparkles}
+          isLoading={isScheduleLoading}
+          footnote={
+            <>
+              Планируемый:{' '}
+              <span className="font-semibold whitespace-nowrap text-foreground/80">
+                ≈&nbsp;{formatMoney(weekExpectedMoney)}
+              </span>
+            </>
+          }
+        />
       </div>
 
       <div className="mb-5 flex gap-2">
         <Button
           variant="soft"
           className="flex-1"
-          disabled={weekSessions.length === 0 || copyWorkSessionMutation.isPending}
-          onClick={() => void copyWeekToNext()}
+          disabled={weekSessions.length === 0}
+          loading={copyWeekMutation.isPending}
+          onClick={copyWeekToNext}
         >
           <Copy />
-          {copyWorkSessionMutation.isPending ? 'Копируем...' : 'Копировать неделю'}
+          {copyWeekMutation.isPending ? 'Копируем...' : 'Копировать неделю'}
         </Button>
         <Button variant="outline" onClick={() => setWeekOffset(0)}>
           Сегодня
@@ -363,16 +369,12 @@ export function WorkerScheduleScreen() {
                     </div>
                     <p className="text-sm text-muted-foreground">{formatDay(day)}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={isAddSessionDisabled}
-                      title="Добавить смену в этот день"
-                      onClick={() => openAddSessionDialog(dateKey)}
-                    >
-                      <CalendarPlus />
-                    </Button>
+                  {isScheduleLoading ? (
+                    <div className="flex items-center gap-1">
+                      <Skeleton className="h-[22px] w-10" />
+                      <Skeleton className="h-[22px] w-16" />
+                    </div>
+                  ) : (
                     <div className="flex flex-col items-end gap-1">
                       <div className="flex items-center gap-1">
                         <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
@@ -392,15 +394,11 @@ export function WorkerScheduleScreen() {
                         </p>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  {isScheduleLoading && (
-                    <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
-                      Загружаем смены...
-                    </div>
-                  )}
+                  {isScheduleLoading && <WorkSessionRowSkeleton />}
 
                   {!isScheduleLoading && daySessions.length === 0 && (
                     <div className="rounded-md border border-dashed border-border px-3 py-4 text-center">
@@ -418,7 +416,15 @@ export function WorkerScheduleScreen() {
                         client={client}
                         clients={activeClients}
                         isStatusPending={updateStatusMutation.isPending}
+                        isStatusUpdating={
+                          updateStatusMutation.isPending &&
+                          updateStatusMutation.variables?.id === session.id
+                        }
                         isDeletePending={deleteWorkSessionMutation.isPending}
+                        isDeleting={
+                          deleteWorkSessionMutation.isPending &&
+                          deleteWorkSessionMutation.variables === session.id
+                        }
                         onToggle={() => toggleSessionStatus(session)}
                         onDelete={() => deleteWorkSessionMutation.mutate(session.id)}
                       />
@@ -450,7 +456,18 @@ export function WorkerScheduleScreen() {
           <section className="rounded-lg border border-border bg-card p-4">
             <h2 className="mb-3 text-base font-semibold">По клиентам</h2>
             <div className="space-y-3">
-              {groupedByClient.length === 0 && (
+              {isScheduleLoading &&
+                Array.from({ length: 2 }, (_, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-10" />
+                    </div>
+                    <Skeleton className="h-2 w-full rounded-full" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))}
+              {!isScheduleLoading && groupedByClient.length === 0 && (
                 <p className="text-sm text-muted-foreground">Пока нет подтверждённых смен.</p>
               )}
               {groupedByClient.map((item) => (
@@ -473,7 +490,7 @@ export function WorkerScheduleScreen() {
             </div>
           </section>
 
-          {!clientsQuery.isLoading && activeClients.length === 0 && (
+          {clientsQuery.isSuccess && activeClients.length === 0 && (
             <section className="rounded-lg border border-dashed border-border bg-card p-4">
               <h2 className="text-base font-semibold">Нет клиентов</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -492,10 +509,14 @@ function Metric({
   title,
   value,
   icon: Icon,
+  isLoading,
+  footnote,
 }: {
   title: string;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
+  isLoading: boolean;
+  footnote?: React.ReactNode;
 }) {
   return (
     <Card className="min-w-0">
@@ -504,9 +525,19 @@ function Metric({
           <Icon className="size-4" />
         </div>
         <p className="text-xs font-medium text-muted-foreground">{title}</p>
-        <p className="min-w-0 break-words text-base leading-tight font-semibold sm:text-lg">
-          {value}
-        </p>
+        {isLoading ? (
+          <Skeleton className="my-0.5 h-5 w-20 sm:h-6" />
+        ) : (
+          <p className="min-w-0 break-words text-base leading-tight font-semibold sm:text-lg">
+            {value}
+          </p>
+        )}
+        {footnote &&
+          (isLoading ? (
+            <Skeleton className="mt-1.5 h-3.5 w-28" />
+          ) : (
+            <p className="mt-1 text-xs leading-snug text-muted-foreground">{footnote}</p>
+          ))}
       </CardContent>
     </Card>
   );
@@ -517,7 +548,9 @@ function WorkSessionRow({
   client,
   clients,
   isStatusPending,
+  isStatusUpdating,
   isDeletePending,
+  isDeleting,
   onToggle,
   onDelete,
 }: {
@@ -525,30 +558,34 @@ function WorkSessionRow({
   client?: WorkerClient;
   clients: WorkerClient[];
   isStatusPending: boolean;
+  /** Статус меняется именно у этой смены. */
+  isStatusUpdating: boolean;
   isDeletePending: boolean;
+  /** Удаляется именно эта смена. */
+  isDeleting: boolean;
   onToggle: () => void;
   onDelete: () => void;
 }) {
   const isConfirmed = session.status === 'confirmed';
   const clientName = client?.name ?? session.client.name;
+  const rateBadge = getRateBadge(session);
+  const statusBadge = getStatusBadge(session.status);
 
   return (
     <div
       className={cn(
-        'grid grid-cols-[1fr_auto] gap-3 rounded-md border p-3 transition-colors',
+        'grid grid-cols-[1fr_auto] gap-3 rounded-md border p-3 transition-[background-color,border-color,opacity]',
         isConfirmed ? 'border-success/25 bg-success/5' : 'border-border bg-background',
+        isDeleting && 'pointer-events-none opacity-50',
       )}
+      aria-busy={isDeleting || undefined}
       onDoubleClick={onToggle}
     >
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate text-sm font-semibold">{clientName}</p>
-          <Badge variant={getRateBadgeVariant(session.rateType)}>
-            {getRateBadgeLabel(session)}
-          </Badge>
-          <Badge variant={getStatusBadgeVariant(session.status)}>
-            {getStatusLabel(session.status)}
-          </Badge>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="min-w-0 text-lg leading-tight font-bold break-words">{clientName}</p>
+          {rateBadge && <Badge variant={rateBadge.variant}>{rateBadge.label}</Badge>}
+          {statusBadge && <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>}
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           с {session.startTime} до {session.endTime} · {formatHours(session.hours)}
@@ -581,10 +618,27 @@ function WorkSessionRow({
           size="sm"
           variant={isConfirmed ? 'soft' : 'outline'}
           disabled={isStatusPending}
+          loading={isStatusUpdating}
           onClick={onToggle}
         >
           {isConfirmed ? 'Отработано' : 'Подтвердить'}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Заглушка смены на время загрузки: те же отступы и строки, что у WorkSessionRow. */
+function WorkSessionRowSkeleton() {
+  return (
+    <div className="grid grid-cols-[1fr_auto] gap-3 rounded-md border border-border bg-background/60 p-3">
+      <div className="min-w-0 space-y-2">
+        <Skeleton className="h-6 w-36 max-w-full" />
+        <Skeleton className="h-4 w-32 max-w-full" />
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <Skeleton className="h-5 w-16" />
+        <Skeleton className="h-9 w-28" />
       </div>
     </div>
   );
@@ -742,7 +796,7 @@ function WorkSessionExpensesDialog({ session }: { session: WorkSession }) {
           )}
 
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" loading={isPending}>
               {isPending ? 'Сохраняем...' : 'Сохранить'}
             </Button>
           </DialogFooter>
@@ -767,6 +821,9 @@ function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
       name: 'comment',
     }) ?? '';
   const isPending = updateWorkSessionMutation.isPending;
+  // comment: null — это удаление (кнопкой «Удалить» или сохранением пустого поля).
+  const isDeleting = isPending && updateWorkSessionMutation.variables?.payload.comment === null;
+  const isSaving = isPending && !isDeleting;
 
   React.useEffect(() => {
     if (open) {
@@ -870,14 +927,15 @@ function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
                 type="button"
                 variant="destructive"
                 disabled={isPending}
+                loading={isDeleting}
                 onClick={() => void deleteComment()}
               >
                 <Trash2 />
-                {isPending ? 'Удаляем...' : 'Удалить'}
+                {isDeleting ? 'Удаляем...' : 'Удалить'}
               </Button>
             )}
-            <Button type="submit" disabled={isPending}>
-              {isPending ? 'Сохраняем...' : 'Сохранить'}
+            <Button type="submit" disabled={isPending} loading={isSaving}>
+              {isSaving ? 'Сохраняем...' : 'Сохранить'}
             </Button>
           </DialogFooter>
         </form>
@@ -1024,7 +1082,7 @@ function AddWorkSessionDialog({
           )}
 
           <DialogFooter>
-            <Button type="submit" disabled={createWorkSessionMutation.isPending}>
+            <Button type="submit" loading={createWorkSessionMutation.isPending}>
               {createWorkSessionMutation.isPending ? 'Добавляем...' : 'Добавить'}
             </Button>
           </DialogFooter>
@@ -1105,7 +1163,7 @@ function EditWorkSessionDialog({
           )}
 
           <DialogFooter>
-            <Button type="submit" disabled={updateWorkSessionMutation.isPending}>
+            <Button type="submit" loading={updateWorkSessionMutation.isPending}>
               {updateWorkSessionMutation.isPending ? 'Сохраняем...' : 'Сохранить'}
             </Button>
           </DialogFooter>
@@ -1395,52 +1453,34 @@ function isManualHoliday(session: WorkSession) {
   return session.rateType === 'weekend' && !isWeekend(parseDate(session.workDate));
 }
 
-function getRateBadgeVariant(rateType: WorkSessionRateType) {
-  if (rateType === 'special') {
-    return 'default';
-  }
-
-  return rateType === 'weekend' ? 'warning' : 'secondary';
-}
-
-function getRateBadgeLabel(session: WorkSession) {
+// Обычный будний день — без бейджа: это норма, бейдж только для особых ставок.
+function getRateBadge(session: WorkSession) {
   if (session.rateType === 'special') {
-    return 'особый день';
+    return { label: 'особый день', variant: 'default' } as const;
   }
 
   if (isManualHoliday(session)) {
-    return 'праздничный';
+    return { label: 'праздничный', variant: 'warning' } as const;
   }
 
   if (session.rateType === 'weekend') {
-    return 'выходной';
+    return { label: 'выходной', variant: 'warning' } as const;
   }
 
-  return 'будний';
+  return null;
 }
 
-function getStatusBadgeVariant(status: WorkSessionStatus) {
+// Запланированная смена без бейджа: её и так видно по кнопке «Подтвердить».
+function getStatusBadge(status: WorkSessionStatus) {
   if (status === 'confirmed') {
-    return 'success';
+    return { label: 'отработано', variant: 'success' } as const;
   }
 
   if (status === 'rejected') {
-    return 'warning';
+    return { label: 'отклонено', variant: 'warning' } as const;
   }
 
-  return 'muted';
-}
-
-function getStatusLabel(status: WorkSessionStatus) {
-  if (status === 'confirmed') {
-    return 'отработано';
-  }
-
-  if (status === 'rejected') {
-    return 'отклонено';
-  }
-
-  return 'план';
+  return null;
 }
 
 function sum(values: number[]) {

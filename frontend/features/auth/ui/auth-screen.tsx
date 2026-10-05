@@ -105,7 +105,12 @@ export function AuthScreen() {
                     </p>
                   )}
 
-                  <Button className="w-full" type="submit" disabled={isPending}>
+                  <Button
+                    className="w-full"
+                    type="submit"
+                    disabled={isPending}
+                    loading={loginMutation.isPending}
+                  >
                     <LockKeyhole />
                     {loginMutation.isPending ? 'Входим...' : 'Войти'}
                     <ArrowRight />
@@ -159,7 +164,12 @@ export function AuthScreen() {
                     </p>
                   )}
 
-                  <Button className="w-full" type="submit" disabled={isPending}>
+                  <Button
+                    className="w-full"
+                    type="submit"
+                    disabled={isPending}
+                    loading={registerWorkerMutation.isPending}
+                  >
                     <UserRoundPlus />
                     {registerWorkerMutation.isPending ? 'Создаём...' : 'Создать кабинет работника'}
                   </Button>

@@ -112,7 +112,8 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           // Телефон: шторка снизу над клавиатурой, не выше видимой области, лишнее прокручивается.
-          'fixed bottom-[var(--keyboard-inset,0px)] left-1/2 z-50 grid max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] w-full -translate-x-1/2 gap-4 overflow-y-auto overscroll-contain rounded-t-lg border border-border bg-background p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-lg outline-none will-change-[filter,opacity,scale,translate]',
+          // Отступ под полоску «домой» — только без клавиатуры: открытая клавиатура её закрывает.
+          'fixed bottom-[var(--keyboard-inset,0px)] left-1/2 z-50 grid max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] w-full -translate-x-1/2 gap-4 overflow-y-auto overscroll-contain rounded-t-lg border border-border bg-background p-5 pb-[calc(1.25rem+max(0px,env(safe-area-inset-bottom)-var(--keyboard-inset,0px)))] shadow-lg outline-none will-change-[filter,opacity,scale,translate]',
           // Планшет и десктоп: окно по центру видимой области.
           'sm:bottom-auto sm:top-[calc(var(--visual-viewport-top,0px)+var(--visual-viewport-height,100dvh)/2)] sm:max-h-[calc(var(--visual-viewport-height,100dvh)-2rem)] sm:w-[calc(100%-2rem)] sm:max-w-lg sm:-translate-y-1/2 sm:rounded-lg sm:pb-5',
           // Заголовок не заезжает под крестик.

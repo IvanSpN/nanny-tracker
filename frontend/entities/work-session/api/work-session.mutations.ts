@@ -18,6 +18,21 @@ export function useCreateWorkSessionMutation() {
   });
 }
 
+/** Несколько смен за одно действие (копирование недели): список обновляется один раз. */
+export function useCreateWorkSessionsMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payloads: CreateWorkSessionPayload[]) => {
+      for (const payload of payloads) {
+        await workSessionApi.createWorkSession(payload);
+      }
+    },
+    // Обновляем и после ошибки: часть смен могла успеть создаться.
+    onSettled: () => invalidateWorkSessions(queryClient),
+  });
+}
+
 export function useUpdateWorkSessionMutation() {
   const queryClient = useQueryClient();
 
@@ -47,8 +62,10 @@ export function useDeleteWorkSessionMutation() {
   });
 }
 
+// Промис возвращаем в onSuccess: мутация остаётся в isPending, пока смены на экране
+// не перезагрузятся. Иначе спиннер гаснет, а старое состояние смены ещё видно.
 function invalidateWorkSessions(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({
+  return queryClient.invalidateQueries({
     queryKey: queryKeys.workSessions.all,
   });
 }

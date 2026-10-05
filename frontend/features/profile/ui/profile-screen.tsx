@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
 import { useUpdateWorkerProfileMutation } from '@/entities/worker/api/worker.mutations';
@@ -83,7 +84,11 @@ export function ProfileScreen() {
               <UserRound className="size-6" />
             </div>
             <div>
-              <h2 className="font-semibold">{workerProfileQuery.data?.name ?? 'Работник'}</h2>
+              {workerProfileQuery.isPending ? (
+                <Skeleton className="mb-1 h-5 w-32" />
+              ) : (
+                <h2 className="font-semibold">{workerProfileQuery.data?.name ?? 'Работник'}</h2>
+              )}
               <p className="text-sm text-muted-foreground">{user?.email ?? user?.role}</p>
             </div>
           </div>
@@ -93,7 +98,7 @@ export function ProfileScreen() {
               <Label htmlFor="worker-name">Имя работника</Label>
               <Input
                 id="worker-name"
-                disabled={workerProfileQuery.isLoading || updateWorkerProfileMutation.isPending}
+                disabled={workerProfileQuery.isPending || updateWorkerProfileMutation.isPending}
                 {...form.register('name', {
                   onChange: () => setIsProfileSaved(false),
                 })}
@@ -113,7 +118,11 @@ export function ProfileScreen() {
               </p>
             )}
             <div className="flex items-center gap-2">
-              <Button type="submit" disabled={updateWorkerProfileMutation.isPending}>
+              <Button
+                type="submit"
+                disabled={workerProfileQuery.isPending}
+                loading={updateWorkerProfileMutation.isPending}
+              >
                 <Save />
                 {updateWorkerProfileMutation.isPending ? 'Сохраняем...' : 'Сохранить'}
               </Button>

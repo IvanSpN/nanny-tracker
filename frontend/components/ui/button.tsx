@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/shared/lib/utils';
 
 const buttonVariants = cva(
@@ -36,19 +37,41 @@ function Button({
   variant,
   size,
   asChild = false,
+  loading = false,
+  disabled,
+  children,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
+    /** Идёт действие: кнопка заблокирована, вместо иконки крутится спиннер. */
+    loading?: boolean;
   }) {
   const Comp = asChild ? Slot : 'button';
+  // С asChild разметку задаёт дочерний элемент — спиннер в него не вставить.
+  const isLoading = loading && !asChild;
 
   return (
     <Comp
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size, className }),
+        // Своя иконка кнопки на время загрузки прячется — её место занимает спиннер.
+        isLoading && '[&>svg:not([data-slot=spinner])]:hidden',
+      )}
+      disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
       {...props}
-    />
+    >
+      {isLoading ? (
+        <>
+          <Spinner />
+          {children}
+        </>
+      ) : (
+        children
+      )}
+    </Comp>
   );
 }
 

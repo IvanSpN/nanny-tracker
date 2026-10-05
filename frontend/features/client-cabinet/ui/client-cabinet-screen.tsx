@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingStatus } from '@/components/ui/spinner';
 import { useCurrentClientQuery } from '@/entities/client/api/client.queries';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
 import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
@@ -70,14 +72,24 @@ export function ClientCabinetScreen() {
   const confirmedSessions = (workSessionsQuery.data ?? []).filter(
     (session) => session.status === 'confirmed',
   );
+  const isCabinetLoading = currentClientQuery.isPending || workSessionsQuery.isPending;
 
   return (
-    <div className="min-h-dvh bg-app-surface pb-24 text-foreground">
-      <main className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
+    // Снизу — место под нижнее меню и полоску «домой», сверху — под Dynamic Island.
+    <div className="min-h-dvh bg-app-surface pb-[calc(6rem+env(safe-area-inset-bottom))] text-foreground">
+      <main
+        className="mx-auto w-full max-w-3xl px-4 pt-[calc(1.25rem+env(safe-area-inset-top))] pb-5 sm:px-6"
+        aria-busy={isCabinetLoading}
+      >
+        <LoadingStatus active={isCabinetLoading} label="Загружаем кабинет…" />
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Кабинет клиента</p>
-            <h1 className="text-2xl font-semibold tracking-normal">{client?.name ?? 'Клиент'}</h1>
+            {currentClientQuery.isPending ? (
+              <Skeleton className="my-1 h-7 w-40" />
+            ) : (
+              <h1 className="text-2xl font-semibold tracking-normal">{client?.name ?? 'Клиент'}</h1>
+            )}
             <p className="text-sm text-muted-foreground">{user?.login}</p>
           </div>
           <Button variant="outline" size="sm" onClick={clearSession}>
@@ -101,13 +113,11 @@ export function ClientCabinetScreen() {
           </div>
         )}
 
-        {(currentClientQuery.isLoading || workSessionsQuery.isLoading) && (
-          <div className="rounded-lg border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-            Загружаем кабинет...
-          </div>
+        {isCabinetLoading && clientTab !== 'profile' && (
+          <ClientSessionsSkeleton withMetrics={clientTab === 'overview'} />
         )}
 
-        {!currentClientQuery.isLoading && !workSessionsQuery.isLoading && (
+        {!isCabinetLoading && (
           <>
             {clientTab === 'overview' && <ClientOverview sessions={confirmedSessions} />}
             {clientTab === 'history' && <ClientHistory sessions={confirmedSessions} />}
@@ -116,7 +126,7 @@ export function ClientCabinetScreen() {
         {clientTab === 'profile' && <ClientProfile onLogout={clearSession} />}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur">
         <div className="mx-auto grid max-w-md grid-cols-3 gap-1">
           {clientNavigation.map((item) => {
             const Icon = item.icon;
@@ -186,6 +196,45 @@ function ClientOverview({ sessions }: { sessions: WorkSession[] }) {
 
           {monthSessions.slice(0, 4).map((session) => (
             <SessionHistoryRow key={session.id} session={session} />
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** Заглушка «Обзора» (карточки + смены) или «Истории» (только смены). */
+function ClientSessionsSkeleton({ withMetrics }: { withMetrics: boolean }) {
+  return (
+    <div className="space-y-4">
+      {withMetrics && (
+        <div className="grid grid-cols-2 gap-2">
+          {Array.from({ length: 2 }, (_, index) => (
+            <Card key={index}>
+              <CardContent className="p-3">
+                <Skeleton className="mb-2 size-8" />
+                <Skeleton className="h-3.5 w-14" />
+                <Skeleton className="mt-1.5 h-7 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <section className="rounded-lg border border-border bg-card p-4">
+        <Skeleton className="mb-4 h-5 w-36" />
+        <div className="space-y-2">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div
+              key={index}
+              className="flex items-start justify-between gap-3 rounded-md bg-muted px-3 py-2"
+            >
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-10" />
+              </div>
+              <Skeleton className="h-5 w-20" />
+            </div>
           ))}
         </div>
       </section>

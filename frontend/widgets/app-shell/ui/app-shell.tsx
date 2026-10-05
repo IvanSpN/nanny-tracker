@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { BarChart3, CalendarDays, HeartHandshake, Settings, UsersRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
 import { useMeQuery } from '@/features/auth/api/auth.queries';
 import { AuthScreen } from '@/features/auth/ui/auth-screen';
@@ -129,11 +130,12 @@ export function AppShell() {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 pb-24 md:pb-8">
+        {/* Снизу — место под нижнее меню и полоску «домой», сверху — под Dynamic Island. */}
+        <main className="min-w-0 flex-1 pt-[env(safe-area-inset-top)] pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-[calc(2rem+env(safe-area-inset-bottom))]">
           <WorkerScreenContent activeTab={workerTab} />
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur md:hidden">
           <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
             {workerNavigation.map((item) => {
               const Icon = item.icon;
@@ -163,10 +165,17 @@ export function AppShell() {
 
 function AppLoadingScreen() {
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4">
-      <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-xs">
-        Загружаем кабинет...
+    <main
+      className="loading-screen-fade-in flex min-h-dvh flex-col items-center justify-center gap-4 px-4"
+      aria-busy="true"
+    >
+      <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+        <HeartHandshake className="size-7" />
       </div>
+      <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Spinner />
+        Загружаем кабинет…
+      </p>
     </main>
   );
 }

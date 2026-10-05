@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingStatus } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
 import type { WorkSession } from '@/entities/work-session/model/types';
@@ -76,7 +78,7 @@ function WeekStatistics() {
 
       <PeriodStatistics
         sessions={workSessionsQuery.data ?? []}
-        isLoading={workSessionsQuery.isLoading}
+        isLoading={workSessionsQuery.isPending}
         error={workSessionsQuery.error}
       />
     </div>
@@ -178,7 +180,7 @@ function MonthStatistics({
 
       <PeriodStatistics
         sessions={workSessionsQuery.data ?? []}
-        isLoading={workSessionsQuery.isLoading}
+        isLoading={workSessionsQuery.isPending}
         error={workSessionsQuery.error}
       />
     </div>
@@ -299,7 +301,9 @@ function PeriodStatistics({
   const totalAmount = sum(confirmedSessions.map((session) => session.totalAmount));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" aria-busy={isLoading}>
+      <LoadingStatus active={isLoading} label="Загружаем статистику…" />
+
       {error && (
         <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <p>{getApiErrorMessage(error)}</p>
@@ -307,11 +311,17 @@ function PeriodStatistics({
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:max-w-md">
-        <StatMetric icon={Clock3} title="Часы" value={isLoading ? '—' : formatHours(totalHours)} />
+        <StatMetric
+          icon={Clock3}
+          title="Часы"
+          value={formatHours(totalHours)}
+          isLoading={isLoading}
+        />
         <StatMetric
           icon={Banknote}
           title="Доход"
-          value={isLoading ? '—' : formatMoney(totalAmount)}
+          value={formatMoney(totalAmount)}
+          isLoading={isLoading}
         />
       </div>
 
@@ -324,10 +334,12 @@ function StatMetric({
   icon: Icon,
   title,
   value,
+  isLoading,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   value: string;
+  isLoading: boolean;
 }) {
   return (
     <Card>
@@ -336,7 +348,11 @@ function StatMetric({
           <Icon className="size-4" />
         </div>
         <p className="text-xs font-medium text-muted-foreground">{title}</p>
-        <p className="mt-1 text-lg font-semibold">{value}</p>
+        {isLoading ? (
+          <Skeleton className="mt-1 h-7 w-24" />
+        ) : (
+          <p className="mt-1 text-lg font-semibold">{value}</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -364,15 +380,27 @@ function Breakdown({ sessions, isLoading }: { sessions: WorkSession[]; isLoading
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Разбивка по клиентам</h2>
-          <Badge variant="secondary">{formatMoney(totalAmount)}</Badge>
+          {isLoading ? (
+            <Skeleton className="h-[22px] w-20" />
+          ) : (
+            <Badge variant="secondary">{formatMoney(totalAmount)}</Badge>
+          )}
         </div>
 
         <div className="space-y-4">
-          {isLoading && (
-            <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
-              Загружаем статистику...
-            </p>
-          )}
+          {isLoading &&
+            Array.from({ length: 3 }, (_, index) => (
+              <div key={index}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                  <Skeleton className="h-5 w-20" />
+                </div>
+                <Skeleton className="h-3 w-full rounded-full" />
+              </div>
+            ))}
 
           {!isLoading && rows.length === 0 && (
             <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
@@ -405,11 +433,16 @@ function Breakdown({ sessions, isLoading }: { sessions: WorkSession[]; isLoading
       <section className="rounded-lg border border-border bg-card p-4">
         <h2 className="mb-4 text-lg font-semibold">Сводка</h2>
         <div className="space-y-3">
-          <SummaryLine label="Подтверждённые часы" value={formatHours(totalHours)} />
-          <SummaryLine label="Начислено" value={formatMoney(totalAmount)} />
+          <SummaryLine
+            label="Подтверждённые часы"
+            value={formatHours(totalHours)}
+            isLoading={isLoading}
+          />
+          <SummaryLine label="Начислено" value={formatMoney(totalAmount)} isLoading={isLoading} />
           <SummaryLine
             label="Средняя ставка"
             value={formatMoney(totalHours > 0 ? totalSalaryAmount / totalHours : 0)}
+            isLoading={isLoading}
           />
         </div>
       </section>
@@ -417,11 +450,23 @@ function Breakdown({ sessions, isLoading }: { sessions: WorkSession[]; isLoading
   );
 }
 
-function SummaryLine({ label, value }: { label: string; value: string }) {
+function SummaryLine({
+  label,
+  value,
+  isLoading,
+}: {
+  label: string;
+  value: string;
+  isLoading: boolean;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="font-semibold">{value}</span>
+      {isLoading ? (
+        <Skeleton className="h-5 w-16" />
+      ) : (
+        <span className="font-semibold">{value}</span>
+      )}
     </div>
   );
 }

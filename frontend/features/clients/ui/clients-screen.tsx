@@ -25,6 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingStatus } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import {
   useCreateClientMutation,
@@ -62,7 +64,11 @@ export function ClientsScreen() {
     clients.find((client) => client.id === selectedClientId) ?? filteredClients[0] ?? clients[0];
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
+    <section
+      className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6"
+      aria-busy={clientsQuery.isPending}
+    >
+      <LoadingStatus active={clientsQuery.isPending} label="Загружаем клиентов…" />
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Клиенты</p>
@@ -91,7 +97,7 @@ export function ClientsScreen() {
 
           <ClientList
             clients={filteredClients}
-            isLoading={clientsQuery.isLoading}
+            isLoading={clientsQuery.isPending}
             selectedClientId={selectedClient?.id ?? null}
             onSelect={setSelectedClientId}
           />
@@ -100,7 +106,7 @@ export function ClientsScreen() {
         {selectedClient ? (
           <ClientDetails client={selectedClient} />
         ) : (
-          <EmptyClientDetails isLoading={clientsQuery.isLoading} />
+          <EmptyClientDetails isLoading={clientsQuery.isPending} />
         )}
       </div>
     </section>
@@ -122,10 +128,9 @@ function ClientList({
     return (
       <div className="space-y-2">
         {Array.from({ length: 3 }, (_, index) => (
-          <div key={index} className="h-24 rounded-lg border border-border bg-card p-3">
-            <div className="mb-3 h-4 w-2/3 rounded-md bg-muted" />
-            <div className="h-3 w-1/2 rounded-md bg-muted" />
-            <div className="mt-4 h-3 w-1/3 rounded-md bg-muted" />
+          <div key={index} className="rounded-lg border border-border bg-card p-3">
+            <Skeleton className="mb-4 h-5 w-2/3" />
+            <Skeleton className="h-4 w-1/2" />
           </div>
         ))}
       </div>
@@ -210,7 +215,7 @@ function ClientDetails({ client }: { client: WorkerClient }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={resetPasswordMutation.isPending}
+              loading={resetPasswordMutation.isPending}
               onClick={resetPassword}
             >
               <KeyRound />
@@ -306,12 +311,39 @@ function ClientDetails({ client }: { client: WorkerClient }) {
 }
 
 function EmptyClientDetails({ isLoading }: { isLoading: boolean }) {
+  if (isLoading) {
+    return <ClientDetailsSkeleton />;
+  }
+
   return (
     <div className="rounded-lg border border-dashed border-border bg-card px-4 py-10 text-center">
-      <p className="font-medium">{isLoading ? 'Загружаем клиентов...' : 'Выбери клиента'}</p>
+      <p className="font-medium">Выбери клиента</p>
       <p className="mt-1 text-sm text-muted-foreground">
         Здесь появятся ставки, контакты и доступы клиента.
       </p>
+    </div>
+  );
+}
+
+/** Заглушка карточки клиента: шапка и две ставки, как у ClientDetails. */
+function ClientDetailsSkeleton() {
+  return (
+    <div className="space-y-4">
+      <section className="rounded-lg border border-border bg-card p-4">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="mt-2 h-4 w-28" />
+      </section>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {Array.from({ length: 2 }, (_, index) => (
+          <Card key={index}>
+            <CardContent className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-28" />
+              <Skeleton className="h-4 w-14" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -414,7 +446,7 @@ function AddClientDialog({ onCreated }: { onCreated: (client: WorkerClient) => v
             )}
 
             <DialogFooter>
-              <Button type="submit" disabled={createClientMutation.isPending}>
+              <Button type="submit" loading={createClientMutation.isPending}>
                 {createClientMutation.isPending ? 'Создаём...' : 'Создать клиента'}
               </Button>
             </DialogFooter>
@@ -513,7 +545,7 @@ function EditClientDialog({ client }: { client: WorkerClient }) {
           )}
 
           <DialogFooter>
-            <Button type="submit" disabled={updateClientMutation.isPending}>
+            <Button type="submit" loading={updateClientMutation.isPending}>
               {updateClientMutation.isPending ? 'Сохраняем...' : 'Сохранить'}
             </Button>
           </DialogFooter>
@@ -659,7 +691,7 @@ function SpecialDayDialog({
           )}
 
           <DialogFooter>
-            <Button type="submit" disabled={updateClientMutation.isPending}>
+            <Button type="submit" loading={updateClientMutation.isPending}>
               {updateClientMutation.isPending ? 'Сохраняем...' : isEdit ? 'Сохранить' : 'Добавить'}
             </Button>
           </DialogFooter>
@@ -745,7 +777,7 @@ function DeleteSpecialDayDialog({
           <Button
             type="button"
             variant="destructive"
-            disabled={isPending}
+            loading={isPending}
             onClick={() => void deleteSpecialDay()}
           >
             {isPending ? 'Удаляем...' : 'Удалить'}
