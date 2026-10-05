@@ -12,11 +12,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
 import type { WorkSession } from '@/entities/work-session/model/types';
 import { getApiErrorMessage } from '@/shared/api/http-client';
-import { addDays, formatDayRange, toDateKey } from '@/shared/lib/date';
+import { addDays, addWeeks, toDateKey } from '@/shared/lib/date';
 import { formatHours, formatMoney } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
 
 const monthFormatter = new Intl.DateTimeFormat('ru-RU', {
+  month: 'long',
+});
+
+const dayMonthFormatter = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
   month: 'long',
 });
 
@@ -25,8 +30,10 @@ const MONTH_NAMES = Array.from({ length: 12 }, (_, index) =>
 );
 
 export function StatisticsScreen() {
+  const currentWeek = React.useMemo(() => getStartOfWeek(new Date()), []);
   const currentMonth = React.useMemo(() => getMonthStart(new Date()), []);
-  // Выбранный месяц храним здесь, чтобы он не сбрасывался при переключении вкладок.
+  // Выбранные неделю и месяц храним здесь, чтобы они не сбрасывались при переключении вкладок.
+  const [selectedWeek, setSelectedWeek] = React.useState(currentWeek);
   const [selectedMonth, setSelectedMonth] = React.useState(currentMonth);
 
   return (
@@ -47,7 +54,11 @@ export function StatisticsScreen() {
         </TabsList>
 
         <TabsContent value="week">
-          <WeekStatistics />
+          <WeekStatistics
+            week={selectedWeek}
+            currentWeek={currentWeek}
+            onWeekChange={setSelectedWeek}
+          />
         </TabsContent>
         <TabsContent value="month">
           <MonthStatistics
@@ -61,27 +72,60 @@ export function StatisticsScreen() {
   );
 }
 
-function WeekStatistics() {
-  const weekStart = React.useMemo(() => getStartOfWeek(new Date()), []);
-  const weekEnd = addDays(weekStart, 6);
+function WeekStatistics({
+  week,
+  currentWeek,
+  onWeekChange,
+}: {
+  week: Date;
+  currentWeek: Date;
+  onWeekChange: (week: Date) => void;
+}) {
+  const [isPickerOpen, setIsPickerOpen] = React.useState(false);
   const workSessionsQuery = useWorkSessionsQuery({
-    dateFrom: toDateKey(weekStart),
-    dateTo: toDateKey(weekEnd),
+    dateFrom: toDateKey(week),
+    dateTo: toDateKey(addDays(week, 6)),
   });
 
+  // Будущие недели не показываем: подтверждённых смен там ещё нет.
+  const goToWeek = (next: Date) => {
+    if (next <= currentWeek) {
+      onWeekChange(next);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-card px-4 py-3">
-        <p className="text-sm text-muted-foreground">Текущая неделя</p>
-        <p className="text-lg font-semibold">{formatDayRange(weekStart, weekEnd)}</p>
-      </div>
+    <PeriodSwipeArea
+      disabled={isPickerOpen}
+      onSwipe={(direction) => goToWeek(addWeeks(week, direction))}
+    >
+      <PeriodNavigation
+        label={formatWeekLabel(week, currentWeek)}
+        previousLabel="Предыдущая неделя"
+        nextLabel="Следующая неделя"
+        isNextDisabled={week.getTime() === currentWeek.getTime()}
+        onPrevious={() => goToWeek(addWeeks(week, -1))}
+        onNext={() => goToWeek(addWeeks(week, 1))}
+        onOpenPicker={() => setIsPickerOpen(true)}
+      />
+
+      <PeriodPickerDialog title="Выбери неделю" open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+        <WeekPicker
+          week={week}
+          currentWeek={currentWeek}
+          onSelect={(next) => {
+            goToWeek(next);
+            setIsPickerOpen(false);
+          }}
+        />
+      </PeriodPickerDialog>
 
       <PeriodStatistics
         sessions={workSessionsQuery.data ?? []}
         isLoading={workSessionsQuery.isPending}
         error={workSessionsQuery.error}
       />
-    </div>
+    </PeriodSwipeArea>
   );
 }
 
@@ -95,13 +139,11 @@ function MonthStatistics({
   onMonthChange: (month: Date) => void;
 }) {
   const [isPickerOpen, setIsPickerOpen] = React.useState(false);
-  const touchStart = React.useRef<{ x: number; y: number } | null>(null);
   const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
   const workSessionsQuery = useWorkSessionsQuery({
     dateFrom: toDateKey(month),
     dateTo: toDateKey(monthEnd),
   });
-  const isCurrentMonth = month.getTime() === currentMonth.getTime();
 
   // Будущие месяцы не показываем: подтверждённых смен там ещё нет.
   const goToMonth = (next: Date) => {
@@ -111,9 +153,55 @@ function MonthStatistics({
   };
 
   return (
+    <PeriodSwipeArea
+      disabled={isPickerOpen}
+      onSwipe={(direction) => goToMonth(addMonths(month, direction))}
+    >
+      <PeriodNavigation
+        label={formatMonthLabel(month)}
+        previousLabel="Предыдущий месяц"
+        nextLabel="Следующий месяц"
+        isNextDisabled={month.getTime() === currentMonth.getTime()}
+        onPrevious={() => goToMonth(addMonths(month, -1))}
+        onNext={() => goToMonth(addMonths(month, 1))}
+        onOpenPicker={() => setIsPickerOpen(true)}
+      />
+
+      <PeriodPickerDialog title="Выбери месяц" open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+        <MonthPicker
+          month={month}
+          currentMonth={currentMonth}
+          onSelect={(next) => {
+            goToMonth(next);
+            setIsPickerOpen(false);
+          }}
+        />
+      </PeriodPickerDialog>
+
+      <PeriodStatistics
+        sessions={workSessionsQuery.data ?? []}
+        isLoading={workSessionsQuery.isPending}
+        error={workSessionsQuery.error}
+      />
+    </PeriodSwipeArea>
+  );
+}
+
+/** Свайп влево-вправо листает период, как недели в расписании. direction: 1 — вперёд, -1 — назад. */
+function PeriodSwipeArea({
+  disabled,
+  onSwipe,
+  children,
+}: {
+  disabled: boolean;
+  onSwipe: (direction: 1 | -1) => void;
+  children: React.ReactNode;
+}) {
+  const touchStart = React.useRef<{ x: number; y: number } | null>(null);
+
+  return (
     <div
       className="space-y-4"
-      // Свайп влево-вправо листает месяцы, как недели в расписании.
       onTouchStart={(event) => {
         const touch = event.touches[0];
         touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
@@ -124,7 +212,7 @@ function MonthStatistics({
         touchStart.current = null;
 
         // Касания внутри шторки тоже долетают сюда через портал — там свайп не нужен.
-        if (!start || !touch || isPickerOpen) {
+        if (!start || !touch || disabled) {
           return;
         }
 
@@ -132,84 +220,167 @@ function MonthStatistics({
         const deltaY = touch.clientY - start.y;
 
         if (Math.abs(deltaX) > 56 && Math.abs(deltaX) > Math.abs(deltaY)) {
-          goToMonth(addMonths(month, deltaX < 0 ? 1 : -1));
+          onSwipe(deltaX < 0 ? 1 : -1);
         }
       }}
     >
-      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:max-w-md">
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-12 [&_svg]:size-5"
-          aria-label="Предыдущий месяц"
-          onClick={() => goToMonth(addMonths(month, -1))}
-        >
-          <ChevronLeft />
-        </Button>
-        <Button
-          variant="outline"
-          className="h-12 min-w-0 text-base font-semibold"
-          aria-haspopup="dialog"
-          onClick={() => setIsPickerOpen(true)}
-        >
-          <span className="truncate">{formatMonthLabel(month)}</span>
-          <ChevronDown className="text-muted-foreground" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-12 [&_svg]:size-5"
-          aria-label="Следующий месяц"
-          disabled={isCurrentMonth}
-          onClick={() => goToMonth(addMonths(month, 1))}
-        >
-          <ChevronRight />
-        </Button>
-      </div>
-
-      <MonthPickerDialog
-        open={isPickerOpen}
-        month={month}
-        currentMonth={currentMonth}
-        onOpenChange={setIsPickerOpen}
-        onSelect={(next) => {
-          goToMonth(next);
-          setIsPickerOpen(false);
-        }}
-      />
-
-      <PeriodStatistics
-        sessions={workSessionsQuery.data ?? []}
-        isLoading={workSessionsQuery.isPending}
-        error={workSessionsQuery.error}
-      />
+      {children}
     </div>
   );
 }
 
-function MonthPickerDialog({
-  open,
-  month,
-  currentMonth,
-  onOpenChange,
-  onSelect,
+function PeriodNavigation({
+  label,
+  previousLabel,
+  nextLabel,
+  isNextDisabled,
+  onPrevious,
+  onNext,
+  onOpenPicker,
 }: {
+  label: string;
+  previousLabel: string;
+  nextLabel: string;
+  isNextDisabled: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  onOpenPicker: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:max-w-md">
+      <Button
+        variant="outline"
+        size="icon"
+        className="size-12 [&_svg]:size-5"
+        aria-label={previousLabel}
+        onClick={onPrevious}
+      >
+        <ChevronLeft />
+      </Button>
+      <Button
+        variant="outline"
+        className="h-12 min-w-0 text-base font-semibold"
+        aria-haspopup="dialog"
+        onClick={onOpenPicker}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown className="text-muted-foreground" />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        className="size-12 [&_svg]:size-5"
+        aria-label={nextLabel}
+        disabled={isNextDisabled}
+        onClick={onNext}
+      >
+        <ChevronRight />
+      </Button>
+    </div>
+  );
+}
+
+function PeriodPickerDialog({
+  title,
+  open,
+  onOpenChange,
+  children,
+}: {
+  title: string;
   open: boolean;
-  month: Date;
-  currentMonth: Date;
   onOpenChange: (open: boolean) => void;
-  onSelect: (month: Date) => void;
+  children: React.ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent aria-describedby={undefined} className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Выбери месяц</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {/* Содержимое монтируется при каждом открытии — год стартует с выбранного месяца. */}
-        <MonthPicker month={month} currentMonth={currentMonth} onSelect={onSelect} />
+        {/* Содержимое монтируется при каждом открытии — выбор стартует с текущего периода. */}
+        {children}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WeekPicker({
+  week,
+  currentWeek,
+  onSelect,
+}: {
+  week: Date;
+  currentWeek: Date;
+  onSelect: (week: Date) => void;
+}) {
+  // Неделя на стыке месяцев относится к месяцу своего четверга — как в ISO-календаре.
+  const [month, setMonth] = React.useState(() => getMonthStart(addDays(week, 3)));
+  const currentMonth = getMonthStart(addDays(currentWeek, 3));
+  const currentYear = currentMonth.getFullYear();
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-12 [&_svg]:size-5"
+          aria-label="Предыдущий месяц"
+          onClick={() => setMonth((current) => addMonths(current, -1))}
+        >
+          <ChevronLeft />
+        </Button>
+        <p className="text-center text-lg font-semibold">
+          {month.getFullYear() === currentYear
+            ? MONTH_NAMES[month.getMonth()]
+            : formatMonthLabel(month)}
+        </p>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-12 [&_svg]:size-5"
+          aria-label="Следующий месяц"
+          disabled={month >= currentMonth}
+          onClick={() => setMonth((current) => addMonths(current, 1))}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
+
+      <div className="grid gap-2">
+        {getMonthWeeks(month).map((option) => {
+          const isSelected = option.getTime() === week.getTime();
+          const isCurrent = option.getTime() === currentWeek.getTime();
+
+          return (
+            <Button
+              key={option.getTime()}
+              variant={isSelected ? 'default' : 'outline'}
+              className={cn(
+                'h-12 justify-between px-4 text-base',
+                isSelected && 'border border-primary',
+                isCurrent && !isSelected && 'border-primary/50 text-primary',
+              )}
+              disabled={option > currentWeek}
+              aria-current={isSelected ? 'date' : undefined}
+              onClick={() => onSelect(option)}
+            >
+              <span className="truncate">{formatWeekRange(option)}</span>
+              {isCurrent && <span className="text-sm font-normal opacity-80">текущая</span>}
+            </Button>
+          );
+        })}
+      </div>
+
+      <Button
+        variant="outline"
+        className="h-12 w-full text-base"
+        disabled={week.getTime() === currentWeek.getTime()}
+        onClick={() => onSelect(currentWeek)}
+      >
+        Текущая неделя
+      </Button>
+    </div>
   );
 }
 
@@ -508,6 +679,37 @@ function addMonths(date: Date, months: number) {
 
 function formatMonthLabel(date: Date) {
   return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/** Недели (понедельники), которые хотя бы одним днём попадают в месяц. */
+function getMonthWeeks(month: Date) {
+  const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  const weeks: Date[] = [];
+
+  for (let week = getStartOfWeek(month); week <= monthEnd; week = addWeeks(week, 1)) {
+    weeks.push(week);
+  }
+
+  return weeks;
+}
+
+/** «6–12 октября» или «29 сентября – 5 октября». */
+function formatWeekRange(weekStart: Date) {
+  const weekEnd = addDays(weekStart, 6);
+
+  if (weekStart.getMonth() === weekEnd.getMonth()) {
+    return `${weekStart.getDate()}–${dayMonthFormatter.format(weekEnd)}`;
+  }
+
+  return `${dayMonthFormatter.format(weekStart)} – ${dayMonthFormatter.format(weekEnd)}`;
+}
+
+/** Год дописываем только для недель не текущего года. Год недели — по её четвергу. */
+function formatWeekLabel(weekStart: Date, currentWeek: Date) {
+  const year = addDays(weekStart, 3).getFullYear();
+  const range = formatWeekRange(weekStart);
+
+  return year === addDays(currentWeek, 3).getFullYear() ? range : `${range} ${year}`;
 }
 
 function capitalize(value: string) {
