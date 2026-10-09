@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadingStatus } from '@/components/ui/spinner';
 import { useCurrentClientQuery } from '@/entities/client/api/client.queries';
+import { logout } from '@/entities/session/model/logout';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
 import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
 import type { WorkSession } from '@/entities/work-session/model/types';
@@ -61,7 +62,6 @@ const clientNavigation: Array<{
 export function ClientCabinetScreen() {
   const clientTab = useNavigationStore((state) => state.clientTab);
   const setClientTab = useNavigationStore((state) => state.setClientTab);
-  const clearSession = useSessionStore((state) => state.clearSession);
   const user = useSessionStore((state) => state.user);
   const currentClientQuery = useCurrentClientQuery();
   const today = new Date();
@@ -92,7 +92,7 @@ export function ClientCabinetScreen() {
             )}
             <p className="text-sm text-muted-foreground">{user?.login}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={clearSession}>
+          <Button variant="outline" size="sm" onClick={logout}>
             Выйти
           </Button>
         </div>
@@ -123,7 +123,7 @@ export function ClientCabinetScreen() {
             {clientTab === 'history' && <ClientHistory sessions={confirmedSessions} />}
           </>
         )}
-        {clientTab === 'profile' && <ClientProfile onLogout={clearSession} />}
+        {clientTab === 'profile' && <ClientProfile onLogout={logout} />}
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur">

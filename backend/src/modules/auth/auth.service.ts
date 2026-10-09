@@ -4,6 +4,10 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectModel } from '@nestjs/sequelize';
+import { createHash, randomBytes } from 'crypto';
+import { Op } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import * as bcrypt from 'bcryptjs';
 import { User, UserRole } from '../users/models/user.model';
@@ -13,6 +17,10 @@ import { RegisterWorkerDto } from './dto/register-worker.dto';
 import { JwtPayload } from './types/jwt-payload';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
+import { RefreshToken } from './models/refresh-token.model';
+
+const DEFAULT_REFRESH_TOKEN_TTL_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -21,6 +29,9 @@ export class AuthService {
     private readonly workersService: WorkersService,
     private readonly sequelize: Sequelize,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    @InjectModel(RefreshToken)
+    private readonly refreshTokenModel: typeof RefreshToken,
   ) {}
 
   async registerWorker(dto: RegisterWorkerDto) {
@@ -67,10 +78,10 @@ export class AuthService {
       };
     });
 
-    const accessToken = await this.generateAccessToken(result.user.id, result.user.role);
+    const tokens = await this.issueTokens(result.user.id, result.user.role);
 
     return {
-      accessToken,
+      ...tokens,
       user: {
         ...this.toAuthUser(result.user),
       },
@@ -97,14 +108,52 @@ export class AuthService {
       throw new UnauthorizedException('Неверный логин или пароль');
     }
 
-    const accessToken = await this.generateAccessToken(user.id, user.role);
+    const tokens = await this.issueTokens(user.id, user.role);
 
     return {
-      accessToken,
+      ...tokens,
       user: {
         ...this.toAuthUser(user),
       },
     };
+  }
+
+  async refresh(refreshToken: string) {
+    const record = await this.refreshTokenModel.findOne({
+      where: { tokenHash: this.hashToken(refreshToken) },
+    });
+
+    if (!record) {
+      throw new UnauthorizedException('Сессия недействительна, войдите заново');
+    }
+
+    if (record.expiresAt.getTime() <= Date.now()) {
+      await record.destroy();
+
+      throw new UnauthorizedException('Сессия истекла, войдите заново');
+    }
+
+    const user = await this.usersService.findById(record.userId);
+
+    if (!user) {
+      await record.destroy();
+
+      throw new UnauthorizedException('Сессия недействительна, войдите заново');
+    }
+
+    // Скользящее окно: пока человек пользуется приложением, сессия не истекает.
+    record.expiresAt = this.getRefreshTokenExpiresAt();
+    await record.save();
+
+    return {
+      accessToken: await this.generateAccessToken(user.id, user.role),
+    };
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    await this.refreshTokenModel.destroy({
+      where: { tokenHash: this.hashToken(refreshToken) },
+    });
   }
 
   async me(userId: string) {
@@ -115,6 +164,53 @@ export class AuthService {
     }
 
     return this.toAuthUser(user);
+  }
+
+  private async issueTokens(userId: string, role: UserRole) {
+    const [accessToken, refreshToken] = await Promise.all([
+      this.generateAccessToken(userId, role),
+      this.createRefreshToken(userId),
+    ]);
+
+    return {
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  private async createRefreshToken(userId: string): Promise<string> {
+    const refreshToken = randomBytes(48).toString('base64url');
+
+    await this.refreshTokenModel.create({
+      userId,
+      tokenHash: this.hashToken(refreshToken),
+      expiresAt: this.getRefreshTokenExpiresAt(),
+    });
+
+    // Чистим просроченные токены этого пользователя, чтобы таблица не росла.
+    await this.refreshTokenModel.destroy({
+      where: {
+        userId,
+        expiresAt: { [Op.lt]: new Date() },
+      },
+    });
+
+    return refreshToken;
+  }
+
+  private getRefreshTokenExpiresAt(): Date {
+    const configuredDays = Number(this.configService.get<string>('REFRESH_TOKEN_TTL_DAYS'));
+    const ttlDays =
+      Number.isFinite(configuredDays) && configuredDays > 0
+        ? configuredDays
+        : DEFAULT_REFRESH_TOKEN_TTL_DAYS;
+
+    return new Date(Date.now() + ttlDays * DAY_MS);
+  }
+
+  // Refresh-токен — случайная строка с большой энтропией, поэтому хватает SHA-256 без соли.
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 
   private async generateAccessToken(userId: string, role: UserRole): Promise<string> {

@@ -6,12 +6,17 @@ import { UsersModule } from '../users/users.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { SequelizeModule } from '@nestjs/sequelize';
 import { SignOptions } from 'jsonwebtoken';
 import { JwtStrategy } from './strategies.ts/jwt.strategy';
 import { RolesGuard } from './guards/roles.guard';
+import { RefreshToken } from './models/refresh-token.model';
+
+const DEFAULT_ACCESS_TOKEN_TTL = '7d';
 
 @Module({
   imports: [
+    SequelizeModule.forFeature([RefreshToken]),
     UsersModule,
     WorkersModule,
     PassportModule,
@@ -21,7 +26,7 @@ import { RolesGuard } from './guards/roles.guard';
       useFactory: (configService: ConfigService): JwtModuleOptions => {
         const secret = configService.getOrThrow<string>('JWT_SECRET');
 
-        const expiresIn = configService.get<string>('JWT_EXPIRES_IN') || '1d';
+        const expiresIn = configService.get<string>('JWT_EXPIRES_IN') || DEFAULT_ACCESS_TOKEN_TTL;
 
         return {
           secret,

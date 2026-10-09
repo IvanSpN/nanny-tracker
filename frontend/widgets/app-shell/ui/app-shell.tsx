@@ -4,6 +4,7 @@ import * as React from 'react';
 import { BarChart3, CalendarDays, HeartHandshake, Settings, UsersRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { logout } from '@/entities/session/model/logout';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
 import { useMeQuery } from '@/features/auth/api/auth.queries';
 import { AuthScreen } from '@/features/auth/ui/auth-screen';
@@ -181,8 +182,6 @@ function AppLoadingScreen() {
 }
 
 function UnsupportedRoleScreen() {
-  const clearSession = useSessionStore((state) => state.clearSession);
-
   return (
     <main className="flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xs">
@@ -190,7 +189,7 @@ function UnsupportedRoleScreen() {
         <p className="mt-2 text-sm text-muted-foreground">
           Кабинет admin появится отдельно. Сейчас готовы worker и client.
         </p>
-        <Button className="mt-4 w-full" onClick={clearSession}>
+        <Button className="mt-4 w-full" onClick={logout}>
           Выйти
         </Button>
       </div>

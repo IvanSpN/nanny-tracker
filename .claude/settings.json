@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v -E 'lock|\\\\.\\(png|svg|ico|woff2?\\)$')",
+      "Bash(cat features/auth/api/auth.api.ts features/auth/api/auth.mutations.ts features/auth/api/auth.queries.ts features/auth/api/auth.types.ts)",
+      "Bash(sed -n 40,100p widgets/app-shell/ui/app-shell.tsx)",
+      "Bash(cat shared/config/env.ts)",
+      "Bash(cat app/providers.tsx)",
+      "Bash(grep -rn \"change-password\\\\|changePassword\" --include=*.ts --include=*.tsx -l . ../backend/src --exclude-dir=node_modules --exclude-dir=.next)",
+      "Bash(sed -n 45,70p features/profile/ui/profile-screen.tsx)",
+      "Bash(sed -n 175,200p widgets/app-shell/ui/app-shell.tsx)",
+      "Bash(sed -n 55,100p features/client-cabinet/ui/client-cabinet-screen.tsx)",
+      "Bash(cat shared/providers/query-provider.tsx)",
+      "Bash(grep -rn \"apiRequest\\\\|fetch\\(\" --include=*.ts --include=*.tsx -l . --exclude-dir=node_modules --exclude-dir=.next)",
+      "Bash(docker run *)",
+      "Bash(docker exec *)",
+      "Bash(break)",
+      "Bash(export DB_HOST=localhost DB_PORT=55432 DB_NAME=nt_test DB_USER=postgres DB_PASSWORD=test)",
+      "Bash(npx sequelize-cli *)",
+      "Bash(mkdir -p /tmp/claude-1000/-home-ivans-project-nanny-tracker/39979a47-7591-442e-898e-f77b625f6e1c/scratchpad/fe)",
+      "Bash(cp /home/ivans/project/nanny-tracker/frontend/shared/api/http-client.ts http-client.ts)",
+      "Bash(cp /home/ivans/project/nanny-tracker/frontend/entities/session/model/use-session-store.ts use-session-store.ts)",
+      "Bash(cp /home/ivans/project/nanny-tracker/frontend/entities/session/model/logout.ts logout.ts)",
+      "Bash(cp /home/ivans/project/nanny-tracker/frontend/shared/config/env.ts env.ts)",
+      "Bash(node --experimental-strip-types run.ts)",
+      "Bash(node --experimental-transform-types run.ts)",
+      "Bash(pkill -f \"nest start\")",
+      "Bash(pkill -f \"dist/main\")",
+      "Bash(docker stop *)",
+      "Bash(kill 3503)"
+    ]
+  }
+}

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { logout } from '@/entities/session/model/logout';
 import { useSessionStore } from '@/entities/session/model/use-session-store';
 import { useUpdateWorkerProfileMutation } from '@/entities/worker/api/worker.mutations';
 import { useWorkerProfileQuery } from '@/entities/worker/api/worker.queries';
@@ -28,7 +29,6 @@ type WorkerProfileValues = z.infer<typeof workerProfileSchema>;
 
 export function ProfileScreen() {
   const user = useSessionStore((state) => state.user);
-  const clearSession = useSessionStore((state) => state.clearSession);
   const resetNavigation = useNavigationStore((state) => state.resetNavigation);
   const themeMode = useThemeStore((state) => state.themeMode);
   const accentColor = useThemeStore((state) => state.accentColor);
@@ -52,8 +52,8 @@ export function ProfileScreen() {
     }
   }, [form, workerProfileQuery.data]);
 
-  const logout = () => {
-    clearSession();
+  const handleLogout = () => {
+    logout();
     resetNavigation();
   };
 
@@ -201,7 +201,7 @@ export function ProfileScreen() {
           <Badge variant="secondary">{user?.role ?? 'user'}</Badge>
         </div>
         <div className="grid gap-2">
-          <Button variant="destructive" onClick={logout}>
+          <Button variant="destructive" onClick={handleLogout}>
             <LogOut />
             Выйти
           </Button>

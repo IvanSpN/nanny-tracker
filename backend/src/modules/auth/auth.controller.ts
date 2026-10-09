@@ -1,7 +1,16 @@
-import { Body, Controller, Post, Get, Req, UseGuards } from '@nestjs/common';
-import { ApiCreatedResponse, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Body, Controller, HttpCode, HttpStatus, Post, Get, Req, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterWorkerDto } from './dto/register-worker.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -37,6 +46,33 @@ export class AuthController {
   })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Получить новый access-токен по refresh-токену',
+  })
+  @ApiOkResponse({
+    description: 'Новый access-токен; срок жизни refresh-токена продлён',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Refresh-токен неизвестен или истёк — нужно войти заново',
+  })
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Выход: отозвать refresh-токен',
+  })
+  @ApiNoContentResponse({
+    description: 'Refresh-токен отозван (или его уже не было)',
+  })
+  logout(@Body() dto: RefreshTokenDto) {
+    return this.authService.logout(dto.refreshToken);
   }
 
   @Get('me')
