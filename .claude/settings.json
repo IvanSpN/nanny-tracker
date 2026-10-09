@@ -27,7 +27,23 @@
       "Bash(pkill -f \"nest start\")",
       "Bash(pkill -f \"dist/main\")",
       "Bash(docker stop *)",
-      "Bash(kill 3503)"
+      "Bash(kill 3503)",
+      "Bash(grep -rln \"особый день\\\\|Расходы:\" --include=*.tsx --include=*.ts . --exclude-dir=node_modules --exclude-dir=.next)",
+      "Bash(grep -rn \"enum WorkSessionStatus\" -A8 ../backend/src/modules/work-sessions/models/work-sessions.ts)",
+      "Bash(ls frontend/components/ui)",
+      "Bash(grep -rn \"'rejected'\\\\|\\\\\"rejected\\\\\"\\\\|REJECTED\" --include=*.ts --include=*.tsx frontend backend/src --exclude-dir=node_modules --exclude-dir=.next)",
+      "Bash(ls node_modules/.bin | grep -i -E \"playwright|puppeteer|chrom\" ; ls ~/.cache/ms-playwright 2>/dev/null; which chromium chromium-browser google-chrome 2>&1 | head -3; grep -n \"success\\\\|warning\" app/globals.css | head -20)",
+      "Read(//home/ivans/.cache/**)",
+      "Bash(grep -E \"^\\(ellipsis|star|check|undo-2|circle-check\\)\\\\.js$\")",
+      "Bash(mkdir -p /tmp/claude-1000/-home-ivans-project-nanny-tracker/39979a47-7591-442e-898e-f77b625f6e1c/scratchpad/pw)",
+      "Bash(npm init *)",
+      "Bash(timeout 150 npm i playwright)",
+      "Bash(timeout 280 npx playwright install chromium)",
+      "Bash(grep -v \"^import\\\\|ApiProperty\\\\|^$\")",
+      "Bash(ldd /home/ivans/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell)",
+      "Bash(apt-get download *)",
+      "Bash(export LD_LIBRARY_PATH=$S/libs/usr/lib/x86_64-linux-gnu)",
+      "Bash(timeout 170 node shot.mjs ../shots ../session.json 440)"
     ]
   }
 }

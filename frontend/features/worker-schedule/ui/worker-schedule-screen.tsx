@@ -3,16 +3,21 @@
 import * as React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Copy,
+  Ellipsis,
   MessageSquareText,
   Pencil,
   Plus,
   Sparkles,
+  Star,
   Trash2,
+  Undo2,
   Wallet,
+  type LucideIcon,
 } from 'lucide-react';
 import { Controller, useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
@@ -50,12 +55,7 @@ import {
   useUpdateWorkSessionStatusMutation,
 } from '@/entities/work-session/api/work-session.mutations';
 import { useWorkSessionsQuery } from '@/entities/work-session/api/work-session.queries';
-import { formatExpenses } from '@/entities/work-session/lib/format-expenses';
-import type {
-  WorkSession,
-  WorkSessionRateType,
-  WorkSessionStatus,
-} from '@/entities/work-session/model/types';
+import type { WorkSession, WorkSessionRateType } from '@/entities/work-session/model/types';
 import { getApiErrorMessage } from '@/shared/api/http-client';
 import {
   addDays,
@@ -353,47 +353,39 @@ export function WorkerScheduleScreen() {
             return (
               <section
                 key={dateKey}
+                aria-current={isToday ? 'date' : undefined}
                 className={cn(
                   'schedule-day-section rounded-lg border p-3 transition-colors',
                   getScheduleListDayTone(day, index),
-                  isToday && 'ring-1 ring-primary/35',
+                  isToday && 'ring-2 ring-primary/40',
                 )}
               >
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-semibold capitalize">
-                        {formatFullWeekday(day)}
-                      </h2>
-                      {isToday && <Badge variant="default">Сегодня</Badge>}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{formatDay(day)}</p>
-                  </div>
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <h2 className="min-w-0 text-base leading-tight">
+                    <span className="font-semibold capitalize">{formatFullWeekday(day)}</span>
+                    <span className="text-muted-foreground">
+                      , <span className="whitespace-nowrap">{formatDay(day)}</span>
+                    </span>
+                  </h2>
                   {isScheduleLoading ? (
-                    <div className="flex items-center gap-1">
-                      <Skeleton className="h-[22px] w-10" />
-                      <Skeleton className="h-[22px] w-16" />
-                    </div>
+                    <Skeleton className="h-5 w-24 shrink-0" />
                   ) : (
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="flex items-center gap-1">
-                        <Badge variant={confirmedDayHours > 0 ? 'success' : 'muted'}>
-                          {formatHours(confirmedDayHours)}
-                        </Badge>
-                        <Badge variant={confirmedDayMoney > 0 ? 'success' : 'muted'}>
-                          {formatMoney(confirmedDayMoney)}
-                        </Badge>
+                    daySessions.length > 0 && (
+                      <div className="shrink-0 text-right text-sm whitespace-nowrap tabular-nums">
+                        {confirmedDaySessions.length > 0 && (
+                          <p className="font-semibold text-success">
+                            {formatHours(confirmedDayHours)} · {formatMoney(confirmedDayMoney)}
+                          </p>
+                        )}
+                        {plannedDaySessions.length > 0 && (
+                          // Прогноз дня: отработанное плюс ещё не подтверждённое. Когда все смены
+                          // отработаны, он равен факту, поэтому не показываем.
+                          <p className="text-muted-foreground">
+                            ≈&nbsp;{formatMoney(confirmedDayMoney + plannedDayMoney)} за день
+                          </p>
+                        )}
                       </div>
-                      {plannedDaySessions.length > 0 && (
-                        <p
-                          className="cursor-help text-xs leading-tight font-light text-muted-foreground"
-                          title="Планируемый доход: смены этого дня, которые ещё не подтверждены"
-                          aria-label={`Планируемый доход ${formatMoney(plannedDayMoney)}`}
-                        >
-                          ≈&nbsp;{formatMoney(plannedDayMoney)}
-                        </p>
-                      )}
-                    </div>
+                    )
                   )}
                 </div>
 
@@ -436,7 +428,7 @@ export function WorkerScheduleScreen() {
                       <Button
                         size="icon"
                         variant="soft"
-                        className="size-8 rounded-full border border-primary/20 bg-background/70 shadow-xs"
+                        className="size-11 rounded-full border border-primary/20 bg-background/70 shadow-xs [&_svg]:size-5"
                         title="Добавить смену в этот день"
                         aria-label="Добавить смену в этот день"
                         disabled={isAddSessionDisabled}
@@ -543,6 +535,9 @@ function Metric({
   );
 }
 
+type WorkSessionRowDialog = 'menu' | 'comment' | 'edit' | 'delete';
+type WorkSessionAction = 'comment' | 'edit' | 'unconfirm' | 'delete';
+
 function WorkSessionRow({
   session,
   client,
@@ -566,79 +561,232 @@ function WorkSessionRow({
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  const [activeDialog, setActiveDialog] = React.useState<WorkSessionRowDialog | null>(null);
   const isConfirmed = session.status === 'confirmed';
+  const isPlanned = session.status === 'pending';
   const clientName = client?.name ?? session.client.name;
-  const rateBadge = getRateBadge(session);
-  const statusBadge = getStatusBadge(session.status);
+
+  const handleDialogOpenChange = (dialog: WorkSessionRowDialog) => (open: boolean) => {
+    setActiveDialog((current) => (open ? dialog : current === dialog ? null : current));
+  };
+
+  const handleAction = (action: WorkSessionAction) => {
+    if (action === 'unconfirm') {
+      setActiveDialog(null);
+      onToggle();
+
+      return;
+    }
+
+    setActiveDialog(action);
+  };
 
   return (
     <div
       className={cn(
-        'grid grid-cols-[1fr_auto] gap-3 rounded-md border p-3 transition-[background-color,border-color,opacity]',
+        'rounded-md border p-3 transition-[background-color,border-color,opacity]',
         isConfirmed ? 'border-success/25 bg-success/5' : 'border-border bg-background',
+        isStatusUpdating && 'opacity-70',
         isDeleting && 'pointer-events-none opacity-50',
       )}
-      aria-busy={isDeleting || undefined}
-      onDoubleClick={onToggle}
+      aria-busy={isDeleting || isStatusUpdating || undefined}
     >
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <p className="min-w-0 text-xl leading-tight font-bold break-words">{clientName}</p>
-          {rateBadge && <Badge variant={rateBadge.variant}>{rateBadge.label}</Badge>}
-          {statusBadge && <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>}
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          с {session.startTime} до {session.endTime} · {formatHours(session.hours)}
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 text-xl leading-tight font-bold break-words">
+          {clientName}
+          {session.rateType === 'special' && (
+            <Star
+              role="img"
+              aria-label="Особый день"
+              className="ml-1.5 inline-block size-4 fill-warning align-[-0.1em] text-warning"
+            />
+          )}
         </p>
-        {session.expenses.length > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Расходы: {formatExpenses(session.expenses)}
-          </p>
-        )}
-        {session.comment && (
-          <p className="mt-2 line-clamp-3 rounded-md bg-muted/70 px-2 py-1.5 text-xs text-muted-foreground">
-            {session.comment}
-          </p>
-        )}
+        <p
+          className={cn(
+            'shrink-0 pt-0.5 text-base font-semibold whitespace-nowrap tabular-nums',
+            !isConfirmed && 'text-muted-foreground',
+          )}
+        >
+          {isPlanned && '≈\u00a0'}
+          {formatMoney(session.totalAmount)}
+        </p>
       </div>
-      <div className="flex flex-col items-end justify-between gap-2">
-        <p className="text-sm font-semibold">{formatMoney(session.totalAmount)}</p>
+
+      <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+        {session.startTime}–{session.endTime} · {formatHours(session.hours)}
+      </p>
+
+      {session.expenses.length > 0 && (
+        <p className="mt-1 text-sm text-muted-foreground">
+          <Wallet className="mr-1 inline-block size-3.5 align-[-0.1em]" aria-hidden />
+          {formatExpensesAdded(session.expenses)}
+        </p>
+      )}
+
+      {session.comment && (
+        <button
+          type="button"
+          className="mt-2 flex min-h-11 w-full cursor-pointer items-start gap-2 rounded-md bg-muted/70 px-2.5 py-2 text-left text-sm text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          onClick={() => setActiveDialog('comment')}
+        >
+          <MessageSquareText className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span className="line-clamp-2 min-w-0 break-words">{session.comment}</span>
+        </button>
+      )}
+
+      <div className="mt-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">
           <WorkSessionExpensesDialog session={session} />
-          <WorkSessionCommentDialog session={session} />
-          <EditWorkSessionDialog session={session} clients={clients} />
-          <DeleteWorkSessionDialog
-            session={session}
-            clientName={clientName}
-            isPending={isDeletePending}
-            onDelete={onDelete}
-          />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-11 [&_svg]:size-5"
+            aria-label="Действия со сменой"
+            onClick={() => setActiveDialog('menu')}
+          >
+            <Ellipsis />
+          </Button>
         </div>
-        <Button
-          size="sm"
-          variant={isConfirmed ? 'soft' : 'outline'}
-          disabled={isStatusPending}
-          loading={isStatusUpdating}
-          onClick={onToggle}
-        >
-          {isConfirmed ? 'Отработано' : 'Подтвердить'}
-        </Button>
+
+        <div className="flex items-center gap-2">
+          {session.status === 'rejected' && <Badge variant="warning">отклонено</Badge>}
+          {isConfirmed ? (
+            // Только метка, не кнопка: откат в план спрятан в меню «⋯», чтобы не нажать случайно.
+            <p className="flex h-11 items-center gap-1.5 px-2 text-sm font-medium text-success">
+              <Check className="size-4" aria-hidden />
+              Отработано
+            </p>
+          ) : (
+            <Button
+              size="lg"
+              disabled={isStatusPending}
+              loading={isStatusUpdating}
+              onClick={onToggle}
+            >
+              Подтвердить
+            </Button>
+          )}
+        </div>
       </div>
+
+      <WorkSessionActionsSheet
+        open={activeDialog === 'menu'}
+        onOpenChange={handleDialogOpenChange('menu')}
+        session={session}
+        clientName={clientName}
+        onSelect={handleAction}
+      />
+      <WorkSessionCommentDialog
+        session={session}
+        open={activeDialog === 'comment'}
+        onOpenChange={handleDialogOpenChange('comment')}
+      />
+      <EditWorkSessionDialog
+        session={session}
+        clients={clients}
+        open={activeDialog === 'edit'}
+        onOpenChange={handleDialogOpenChange('edit')}
+      />
+      <DeleteWorkSessionDialog
+        session={session}
+        clientName={clientName}
+        isPending={isDeletePending}
+        onDelete={onDelete}
+        open={activeDialog === 'delete'}
+        onOpenChange={handleDialogOpenChange('delete')}
+      />
     </div>
+  );
+}
+
+/** Шторка действий «⋯»: на телефоне выезжает снизу, строки по 48 px, удаление — внизу красным. */
+function WorkSessionActionsSheet({
+  open,
+  onOpenChange,
+  session,
+  clientName,
+  onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  session: WorkSession;
+  clientName: string;
+  onSelect: (action: WorkSessionAction) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-3 sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{clientName}</DialogTitle>
+          <DialogDescription>
+            {formatDay(parseDate(session.workDate))}, {session.startTime}–{session.endTime}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="-mx-2 flex flex-col">
+          <WorkSessionActionButton icon={MessageSquareText} onClick={() => onSelect('comment')}>
+            {session.comment ? 'Изменить комментарий' : 'Добавить комментарий'}
+          </WorkSessionActionButton>
+          <WorkSessionActionButton icon={Pencil} onClick={() => onSelect('edit')}>
+            Изменить смену
+          </WorkSessionActionButton>
+          {session.status === 'confirmed' && (
+            <WorkSessionActionButton icon={Undo2} onClick={() => onSelect('unconfirm')}>
+              Вернуть в план
+            </WorkSessionActionButton>
+          )}
+          <div role="separator" className="mx-2 my-1 h-px bg-border" />
+          <WorkSessionActionButton icon={Trash2} destructive onClick={() => onSelect('delete')}>
+            Удалить смену
+          </WorkSessionActionButton>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WorkSessionActionButton({
+  icon: Icon,
+  destructive = false,
+  onClick,
+  children,
+}: {
+  icon: LucideIcon;
+  destructive?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'flex h-12 w-full cursor-pointer items-center gap-3 rounded-md px-2 text-left text-base font-medium outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40 active:bg-accent',
+        destructive ? 'text-destructive' : 'text-foreground',
+      )}
+      onClick={onClick}
+    >
+      <Icon className="size-5 shrink-0" aria-hidden />
+      {children}
+    </button>
   );
 }
 
 /** Заглушка смены на время загрузки: те же отступы и строки, что у WorkSessionRow. */
 function WorkSessionRowSkeleton() {
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-3 rounded-md border border-border bg-background/60 p-3">
-      <div className="min-w-0 space-y-2">
+    <div className="rounded-md border border-border bg-background/60 p-3">
+      <div className="flex items-start justify-between gap-3">
         <Skeleton className="h-7 w-36 max-w-full" />
-        <Skeleton className="h-4 w-32 max-w-full" />
-      </div>
-      <div className="flex flex-col items-end gap-2">
         <Skeleton className="h-5 w-16" />
-        <Skeleton className="h-9 w-28" />
+      </div>
+      <Skeleton className="mt-2 h-4 w-32 max-w-full" />
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <Skeleton className="size-11" />
+          <Skeleton className="size-11" />
+        </div>
+        <Skeleton className="h-11 w-32" />
       </div>
     </div>
   );
@@ -716,7 +864,10 @@ function WorkSessionExpensesDialog({ session }: { session: WorkSession }) {
         <Button
           size="icon"
           variant={session.expenses.length > 0 ? 'soft' : 'ghost'}
-          title={session.expenses.length > 0 ? 'Изменить доп. расходы' : 'Добавить доп. расходы'}
+          className="size-11 [&_svg]:size-5"
+          aria-label={
+            session.expenses.length > 0 ? 'Изменить доп. расходы' : 'Добавить доп. расходы'
+          }
         >
           <Wallet />
         </Button>
@@ -806,8 +957,15 @@ function WorkSessionExpensesDialog({ session }: { session: WorkSession }) {
   );
 }
 
-function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
-  const [open, setOpen] = React.useState(false);
+function WorkSessionCommentDialog({
+  session,
+  open,
+  onOpenChange,
+}: {
+  session: WorkSession;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const updateWorkSessionMutation = useUpdateWorkSessionMutation();
   const form = useForm<WorkSessionCommentValues>({
     resolver: zodResolver(workSessionCommentSchema),
@@ -842,7 +1000,7 @@ function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
         },
       });
 
-      setOpen(false);
+      onOpenChange(false);
     } catch {
       // Error is rendered from mutation state.
     }
@@ -860,7 +1018,7 @@ function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
       form.reset({
         comment: '',
       });
-      setOpen(false);
+      onOpenChange(false);
     } catch {
       // Error is rendered from mutation state.
     }
@@ -870,21 +1028,12 @@ function WorkSessionCommentDialog({ session }: { session: WorkSession }) {
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
+        onOpenChange(nextOpen);
         if (!nextOpen) {
           updateWorkSessionMutation.reset();
         }
       }}
     >
-      <DialogTrigger asChild>
-        <Button
-          size="icon"
-          variant={session.comment ? 'soft' : 'ghost'}
-          title={session.comment ? 'Изменить комментарий' : 'Добавить комментарий'}
-        >
-          <MessageSquareText />
-        </Button>
-      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Комментарий к смене</DialogTitle>
@@ -949,26 +1098,23 @@ function DeleteWorkSessionDialog({
   clientName,
   isPending,
   onDelete,
+  open,
+  onOpenChange,
 }: {
   session: WorkSession;
   clientName: string;
   isPending: boolean;
   onDelete: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = React.useState(false);
-
   const deleteSession = () => {
     onDelete();
-    setOpen(false);
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="icon" variant="ghost" title="Удалить" disabled={isPending}>
-          <Trash2 />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Удалить смену?</DialogTitle>
@@ -983,7 +1129,7 @@ function DeleteWorkSessionDialog({
             type="button"
             variant="outline"
             disabled={isPending}
-            onClick={() => setOpen(false)}
+            onClick={() => onOpenChange(false)}
           >
             Отмена
           </Button>
@@ -1095,11 +1241,14 @@ function AddWorkSessionDialog({
 function EditWorkSessionDialog({
   session,
   clients,
+  open,
+  onOpenChange,
 }: {
   session: WorkSession;
   clients: WorkerClient[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = React.useState(false);
   const updateWorkSessionMutation = useUpdateWorkSessionMutation();
   const form = useForm<WorkSessionFormInput, unknown, WorkSessionFormValues>({
     resolver: zodResolver(workSessionFormSchema),
@@ -1126,7 +1275,7 @@ function EditWorkSessionDialog({
         },
       });
 
-      setOpen(false);
+      onOpenChange(false);
     } catch {
       // Error is rendered from mutation state.
     }
@@ -1136,17 +1285,12 @@ function EditWorkSessionDialog({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
+        onOpenChange(nextOpen);
         if (!nextOpen) {
           updateWorkSessionMutation.reset();
         }
       }}
     >
-      <DialogTrigger asChild>
-        <Button size="icon" variant="ghost" title="Изменить">
-          <Pencil />
-        </Button>
-      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Изменить смену</DialogTitle>
@@ -1453,34 +1597,11 @@ function isManualHoliday(session: WorkSession) {
   return session.rateType === 'weekend' && !isWeekend(parseDate(session.workDate));
 }
 
-// Обычный будний день — без бейджа: это норма, бейдж только для особых ставок.
-function getRateBadge(session: WorkSession) {
-  if (session.rateType === 'special') {
-    return { label: 'особый день', variant: 'default' } as const;
-  }
-
-  if (isManualHoliday(session)) {
-    return { label: 'праздничный', variant: 'warning' } as const;
-  }
-
-  if (session.rateType === 'weekend') {
-    return { label: 'выходной', variant: 'warning' } as const;
-  }
-
-  return null;
-}
-
-// Запланированная смена без бейджа: её и так видно по кнопке «Подтвердить».
-function getStatusBadge(status: WorkSessionStatus) {
-  if (status === 'confirmed') {
-    return { label: 'отработано', variant: 'success' } as const;
-  }
-
-  if (status === 'rejected') {
-    return { label: 'отклонено', variant: 'warning' } as const;
-  }
-
-  return null;
+/** «Вафли +3 000 тг» — плюс показывает, что трата уже входит в сумму смены. */
+function formatExpensesAdded(expenses: WorkSession['expenses']) {
+  return expenses
+    .map((expense) => `${expense.description} +${formatMoney(expense.amount)}`)
+    .join(', ');
 }
 
 function sum(values: number[]) {
