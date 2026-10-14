@@ -145,6 +145,7 @@ export class WorkSessionsService {
       include: [this.clientInclude, this.expensesInclude],
       order: [
         ['workDate', 'ASC'],
+        ['startTime', 'ASC'],
         ['createdAt', 'ASC'],
       ],
     });
